@@ -13,6 +13,20 @@ services:
   connect_telemetry: true
   start_yolo_udp: true
 
+blackbox:
+  enabled: true
+  output_dir: logs/blackbox
+  sample_hz: 20
+  flush_every: 20
+  rotate_mb: 100
+  keep_files: 20
+  include_perception: true
+  include_drone: true
+  include_gimbal: true
+  include_fused: true
+  include_commands: true
+  include_events: true
+
 executor:
   body_frame: 1
   gimbal_roll_deg: 0.0

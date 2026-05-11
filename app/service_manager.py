@@ -12,7 +12,7 @@ from app.app_config import AppConfig
 from fusion.fusion_manager import FusionManager
 from fusion.models import FusionConfig, PerceptionTarget
 from telemetry_link.link_manager import LinkManager
-from telemetry_link.models import DroneState, GimbalState
+from telemetry_link.models import DroneState, GimbalState, LinkStatus
 
 
 class YoloUdpReceiver(threading.Thread):
@@ -146,3 +146,8 @@ class ServiceManager:
         if self.link_manager is None:
             return GimbalState()
         return self.link_manager.get_latest_gimbal_state()
+
+    def get_link_status(self) -> LinkStatus | None:
+        if self.link_manager is None:
+            return None
+        return self.link_manager.get_link_status()

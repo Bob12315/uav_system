@@ -6,11 +6,12 @@ import threading
 import time
 from collections import deque
 
-from app.app_config import AppConfig
+from app.app_config import AppConfig, load_flight_modes_runtime_config
+from app.blackbox_recorder import BlackboxRecorder
 from app.debug_runtime import DebugRuntime
 from app.health_monitor import HealthMonitor, HealthMonitorConfig
 from app.mission_manager import MissionManager, MissionManagerConfig, MissionMode
-from app.mode_registry import ModeRegistry
+from app.mode_registry import ModeRegistry, copy_dataclass_values
 from app.service_manager import ServiceManager
 from flight_modes.common import (
     CommandShaper,
@@ -58,6 +59,7 @@ class SystemRunner:
         )
         self.command_shaper = CommandShaper(config=config.shaper)
         self.executor = FlightCommandExecutor(config=config.executor)
+        self.blackbox = BlackboxRecorder(config.blackbox)
         self.debug_runtime = DebugRuntime(config.debug)
         self.controller_switches = ControlRuntimeSwitches(
             gimbal=config.start_gimbal,
@@ -67,6 +69,7 @@ class SystemRunner:
         )
         self.control_command_log: deque[str] = deque(maxlen=120)
         self.control_command_log_lock = threading.Lock()
+        self.runtime_config_lock = threading.RLock()
         self.latest_task_mode = "UNKNOWN"
         self.last_send_commands: bool | None = None
         self.target_lost_since: float | None = None
@@ -74,6 +77,7 @@ class SystemRunner:
 
     def run(self) -> None:
         self.services.start()
+        self.blackbox.start()
         self.executor.set_telemetry_link(self.services.link_manager)
         try:
             if self.config.runtime.ui_enabled and self.services.link_manager is not None:
@@ -88,6 +92,7 @@ class SystemRunner:
     def stop(self) -> None:
         self.stop_event.set()
         self.executor.reset()
+        self.blackbox.close()
         self.services.stop()
         self.logger.info("app runtime stopped")
 
@@ -98,6 +103,7 @@ class SystemRunner:
             controller_switches=self.controller_switches,
             yolo_client=YoloCommandClient(self.config.yolo_command),
             task_mode_handler=self._set_task_mode_override,
+            flight_config_reload_handler=self._reload_flight_mode_config,
         )
         control_thread = threading.Thread(
             name="AppControlLoop",
@@ -133,28 +139,30 @@ class SystemRunner:
                 perception = self.services.get_perception(now)
                 drone = self.services.get_drone_state()
                 gimbal = self.services.get_gimbal_state()
+                link = self.services.get_link_status()
                 fused = self.services.fusion_manager.update(perception, drone, gimbal)
-                inputs = self.input_adapter.adapt(fused)
-                health = self.health_monitor.update(inputs)
-                mission = self.mission_manager.update(inputs, health)
-                mission = self.debug_runtime.apply_mission_override(mission)
-                raw_command, mode_status = self._update_active_mode(mission.active_mode, inputs)
-                raw_command = self.debug_runtime.apply_command_override(raw_command)
-                raw_command = self._apply_controller_switches(raw_command)
-                raw_for_log = FlightCommand(
-                    vx_cmd=raw_command.vx_cmd,
-                    vy_cmd=raw_command.vy_cmd,
-                    vz_cmd=raw_command.vz_cmd,
-                    yaw_rate_cmd=raw_command.yaw_rate_cmd,
-                    gimbal_yaw_rate_cmd=raw_command.gimbal_yaw_rate_cmd,
-                    gimbal_pitch_rate_cmd=raw_command.gimbal_pitch_rate_cmd,
-                    enable_body=raw_command.enable_body,
-                    enable_gimbal=raw_command.enable_gimbal,
-                    enable_approach=raw_command.enable_approach,
-                    active=raw_command.active,
-                    valid=raw_command.valid,
-                )
-                shaped = self.command_shaper.update(raw_command, inputs.dt)
+                with self.runtime_config_lock:
+                    inputs = self.input_adapter.adapt(fused)
+                    health = self.health_monitor.update(inputs)
+                    mission = self.mission_manager.update(inputs, health)
+                    mission = self.debug_runtime.apply_mission_override(mission)
+                    raw_command, mode_status = self._update_active_mode(mission.active_mode, inputs)
+                    raw_command = self.debug_runtime.apply_command_override(raw_command)
+                    raw_command = self._apply_controller_switches(raw_command)
+                    raw_for_log = FlightCommand(
+                        vx_cmd=raw_command.vx_cmd,
+                        vy_cmd=raw_command.vy_cmd,
+                        vz_cmd=raw_command.vz_cmd,
+                        yaw_rate_cmd=raw_command.yaw_rate_cmd,
+                        gimbal_yaw_rate_cmd=raw_command.gimbal_yaw_rate_cmd,
+                        gimbal_pitch_rate_cmd=raw_command.gimbal_pitch_rate_cmd,
+                        enable_body=raw_command.enable_body,
+                        enable_gimbal=raw_command.enable_gimbal,
+                        enable_approach=raw_command.enable_approach,
+                        active=raw_command.active,
+                        valid=raw_command.valid,
+                    )
+                    shaped = self.command_shaper.update(raw_command, inputs.dt)
 
                 controller_enabled = self.controller_switches.snapshot()
                 self.executor.config.send_commands = bool(controller_enabled.send_commands)
@@ -172,6 +180,23 @@ class SystemRunner:
                             )
                     self._maybe_recenter_gimbal_after_target_loss(now, bool(inputs.target_valid), False)
                 self.last_send_commands = bool(controller_enabled.send_commands)
+
+                self.blackbox.record(
+                    now=now,
+                    dt=inputs.dt,
+                    perception=perception,
+                    drone=drone,
+                    gimbal=gimbal,
+                    link=link,
+                    fused=fused,
+                    inputs=inputs,
+                    mission=mission,
+                    health=health,
+                    mode_status=mode_status,
+                    raw_command=raw_for_log,
+                    shaped_command=shaped,
+                    send_commands=bool(controller_enabled.send_commands),
+                )
 
                 with self.control_command_log_lock:
                     self.latest_task_mode = mission.active_mode
@@ -266,23 +291,54 @@ class SystemRunner:
             ]
 
     def _set_task_mode_override(self, mode_name: str | None) -> CommandResult:
-        if mode_name is None:
-            self.debug_runtime.config.force_mode = None
-            self.mode_registry.reset_all()
-            return CommandResult(True, "task mode auto")
-        normalized = mode_name.strip().upper()
-        if normalized == MissionMode.IDLE.value:
+        with self.runtime_config_lock:
+            if mode_name is None:
+                self.debug_runtime.config.force_mode = None
+                self.mode_registry.reset_all()
+                return CommandResult(True, "task mode auto")
+            normalized = mode_name.strip().upper()
+            if normalized == MissionMode.IDLE.value:
+                self.debug_runtime.config.force_mode = normalized
+                return CommandResult(True, "task mode forced IDLE")
+            try:
+                self.mode_registry.get(normalized)
+            except KeyError:
+                return CommandResult(
+                    False,
+                    "task mode must be APPROACH_TRACK, OVERHEAD_HOLD, CORRIDOR_FOLLOW, IDLE, or auto",
+                )
             self.debug_runtime.config.force_mode = normalized
-            return CommandResult(True, "task mode forced IDLE")
+            return CommandResult(True, f"task mode forced {normalized}")
+
+    def _reload_flight_mode_config(self) -> CommandResult:
+        path = self.config.flight_modes_config_path
+        if not path:
+            return CommandResult(False, "flight mode config reload is unavailable for legacy config")
         try:
-            self.mode_registry.get(normalized)
-        except KeyError:
-            return CommandResult(
-                False,
-                "task mode must be APPROACH_TRACK, OVERHEAD_HOLD, CORRIDOR_FOLLOW, IDLE, or auto",
+            input_adapter_cfg, approach_cfg, overhead_cfg, shaper_cfg = load_flight_modes_runtime_config(
+                path,
+                self.config.mission_config_path,
             )
-        self.debug_runtime.config.force_mode = normalized
-        return CommandResult(True, f"task mode forced {normalized}")
+        except Exception as exc:
+            self.logger.exception("failed to reload flight mode config")
+            return CommandResult(False, f"flight mode config reload failed: {exc}")
+
+        with self.runtime_config_lock:
+            copy_dataclass_values(self.config.input_adapter, input_adapter_cfg)
+            copy_dataclass_values(self.config.approach_track, approach_cfg)
+            copy_dataclass_values(self.config.overhead_hold, overhead_cfg)
+            copy_dataclass_values(self.config.shaper, shaper_cfg)
+            self.mode_registry.apply_configs(
+                approach_config=approach_cfg,
+                overhead_config=overhead_cfg,
+                reset=True,
+            )
+            self.input_adapter.config = self.config.input_adapter
+            self.command_shaper.config = self.config.shaper
+            self.command_shaper.reset()
+
+        self.logger.info("reloaded flight mode config from %s", path)
+        return CommandResult(True, f"flight mode config reloaded: {path}")
 
     def _maybe_recenter_gimbal_after_target_loss(
         self,

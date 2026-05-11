@@ -179,7 +179,23 @@ task auto
 
 注意 `mode GUIDED` 仍然是飞控模式命令；`task mode ...` 才是 app 内部任务模式命令。
 
-初始值来自 [control/config.yaml](../control/config.yaml)：
+## PID/飞行模式参数重载
+
+app 启动 UI 时支持在运行中重载 [config/flight_modes.yaml](../config/flight_modes.yaml)：
+
+```text
+pid reload
+flight reload
+flight config reload
+```
+
+这些命令会重新读取 `input_adapter`、`approach_track`、`overhead_hold` 和 `shaper` 配置，并更新当前运行中的 controller。适合调 `kp_*`、`ki_*`、`kd_*`、死区、限幅和 slew rate 等参数。
+
+重载只影响当前 app 进程，不会写回 YAML。重载成功时会重置 flight mode/controller 内部状态，包括积分、微分历史和 command shaper 状态。
+
+## Control Output
+
+初始值来自 [config/app.yaml](../config/app.yaml)：
 
 ```yaml
 executor:
@@ -187,8 +203,6 @@ executor:
 ```
 
 当 `SEND=OFF` 时，control 仍然会正常计算内部 shaped command，但不会调用 `ControlExecutor` 下发，也会清空 `telemetry_link` 中保留的连续 control/gimbal_rate 队列。UI 的 `Control output` 只显示一条静态 `DRY continuous command sending disabled` 提示，不再刷新命令流水。
-
-## Control Output
 
 control 启动 UI 时，`Control output` 会显示最近的 shaped command：
 

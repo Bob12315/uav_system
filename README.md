@@ -107,6 +107,14 @@ python -m app.main --connect-telemetry --send-commands false
 python -m app.main --connect-telemetry --ui --send-commands false
 ```
 
+UI 中可以在 app 运行时重载飞行模式控制参数。修改 `config/flight_modes.yaml` 后输入：
+
+```text
+pid reload
+```
+
+这会重新读取 `input_adapter`、`approach_track`、`overhead_hold` 和 `shaper` 配置，并更新当前运行中的 controller。常用来现场调整 `kp_*`、`ki_*`、`kd_*`、限幅和死区参数。重载成功后，控制器内部积分/微分状态会被重置，配置文件本身不会被 UI 修改。
+
 ### 5. SITL 中实发控制
 
 只在 SITL 或已确认安全的实机环境中使用：

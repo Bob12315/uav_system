@@ -86,6 +86,8 @@ recovery:
 - `overhead_hold.longitudinal`：正上方悬停前后平移参数。
 - `shaper`：最终命令限幅和 slew rate。
 
+app 带 UI 运行时，修改本文件后可以在 UI 输入 `pid reload` 或 `flight reload`，将上述 flight mode 参数重载进当前进程。重载会更新正在运行的 controller，并重置积分/微分历史和 command shaper 状态；不会修改 YAML 文件。
+
 ## config/telemetry.yaml
 
 MAVLink 连接、消息频率、超时和 UI 配置。

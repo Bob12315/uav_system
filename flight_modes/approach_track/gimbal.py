@@ -46,12 +46,14 @@ class ApproachGimbalController:
             self._yaw_integral = 0.0
             self._last_ex_cam = 0.0
         else:
-            d_ex = self._compute_derivative(
-                value=float(inputs.ex_cam),
-                last_value=self._last_ex_cam,
-                dt=dt,
-                derivative_limit=self.config.derivative_limit_yaw,
-            )
+            d_ex = 0.0
+            if self.config.use_derivative:
+                d_ex = self._compute_derivative(
+                    value=float(inputs.ex_cam),
+                    last_value=self._last_ex_cam,
+                    dt=dt,
+                    derivative_limit=self.config.derivative_limit_yaw,
+                )
             self._yaw_integral = self._integrate(self._yaw_integral, ex_cam, dt)
             yaw_rate_cmd = self.config.yaw_sign * (
                 self.config.kp_yaw * ex_cam
@@ -65,12 +67,14 @@ class ApproachGimbalController:
             self._pitch_integral = 0.0
             self._last_ey_cam = 0.0
         else:
-            d_ey = self._compute_derivative(
-                value=float(inputs.ey_cam),
-                last_value=self._last_ey_cam,
-                dt=dt,
-                derivative_limit=self.config.derivative_limit_pitch,
-            )
+            d_ey = 0.0
+            if self.config.use_derivative:
+                d_ey = self._compute_derivative(
+                    value=float(inputs.ey_cam),
+                    last_value=self._last_ey_cam,
+                    dt=dt,
+                    derivative_limit=self.config.derivative_limit_pitch,
+                )
             self._pitch_integral = self._integrate(self._pitch_integral, ey_cam, dt)
             pitch_rate_cmd = self.config.pitch_sign * (
                 self.config.kp_pitch * ey_cam
@@ -148,4 +152,3 @@ class ApproachGimbalController:
 
     def _make_inactive_command(self, valid: bool) -> ApproachGimbalCommand:
         return ApproachGimbalCommand(active=False, valid=valid)
-

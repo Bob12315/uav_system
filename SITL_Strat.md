@@ -14,3 +14,9 @@ python3 ~/uav_project/src/control/main.py
 
 cd ~/uav_project/src/
 python3 -m app.main 
+
+
+
+ffplay -f v4l2 -input_format yuyv422 -video_size 640x480 -framerate 30 /dev/video0
+
+ffplay -fflags nobuffer -flags low_delay -framedrop -sync ext /dev/video0

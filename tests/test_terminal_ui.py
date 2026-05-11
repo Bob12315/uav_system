@@ -43,3 +43,9 @@ def test_complete_reports_no_match_without_changing_input() -> None:
     assert result.buffer == "zz"
     assert result.cursor == 2
     assert result.message == "no completion"
+
+
+def test_complete_pid_reload_command() -> None:
+    result = complete_command_input("pid r", len("pid r"))
+
+    assert result.buffer == "pid reload"

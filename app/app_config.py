@@ -179,8 +179,25 @@ class AppRuntimeConfig:
 
 
 @dataclass(slots=True)
+class BlackboxConfig:
+    enabled: bool
+    output_dir: str
+    sample_hz: float
+    flush_every: int
+    rotate_mb: float
+    keep_files: int
+    include_perception: bool
+    include_drone: bool
+    include_gimbal: bool
+    include_fused: bool
+    include_commands: bool
+    include_events: bool
+
+
+@dataclass(slots=True)
 class AppConfig:
     runtime: AppRuntimeConfig
+    blackbox: BlackboxConfig
     control: ControlConfig
     telemetry: TelemetryConfig
     yolo_command: YoloCommandConfig
@@ -191,6 +208,8 @@ class AppConfig:
     shaper: CommandShaperConfig
     executor: FlightCommandExecutorConfig
     debug: FlightModeDebugConfig
+    flight_modes_config_path: str | None
+    mission_config_path: str | None
     start_gimbal: bool
     start_body: bool
     start_approach: bool
@@ -251,6 +270,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         help="Stop automatically after this many seconds; useful for smoke tests.",
     )
+    parser.add_argument("--blackbox-enabled", type=_to_bool)
+    parser.add_argument("--blackbox-output-dir")
     return parser
 
 
@@ -266,6 +287,7 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
 
     runtime_data = _section(app_data, "runtime")
     services_data = _section(app_data, "services")
+    blackbox_data = _section(app_data, "blackbox")
     mission_data = _normalize_mission_config(
         mission_file_data if mission_file_data else _section(app_data, "mission")
     )
@@ -362,6 +384,7 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
     )
     if runtime_cfg.run_seconds is not None:
         runtime_cfg.run_seconds = float(runtime_cfg.run_seconds)
+    blackbox_cfg = _build_blackbox_config(blackbox_data, args)
 
     runtime_compat_data = dict(runtime_data)
     runtime_compat_data.update(recovery_data)
@@ -375,6 +398,7 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
 
     return AppConfig(
         runtime=runtime_cfg,
+        blackbox=blackbox_cfg,
         control=control_cfg,
         telemetry=telemetry_cfg,
         yolo_command=yolo_command_cfg,
@@ -385,10 +409,27 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
         shaper=shaper_cfg,
         executor=executor_cfg,
         debug=debug_cfg,
+        flight_modes_config_path=str(args.flight_modes_config),
+        mission_config_path=str(args.mission_config),
         start_gimbal=bool(args.start_auto_control),
         start_body=bool(args.start_auto_control),
         start_approach=bool(args.start_auto_control),
         start_send_commands=bool(send_commands),
+    )
+
+
+def load_flight_modes_runtime_config(
+    flight_modes_config_path: str,
+    mission_config_path: str | None = None,
+) -> tuple[InputAdapterConfig, ApproachTrackConfig, OverheadHoldConfig, CommandShaperConfig]:
+    flight_data = _load_yaml(flight_modes_config_path)
+    mission_file_data = _load_yaml_if_exists(mission_config_path) if mission_config_path else {}
+    mission_data = _normalize_mission_config(mission_file_data)
+    return (
+        _build_input_adapter_config(_section(flight_data, "input_adapter")),
+        _build_approach_track_config(flight_data, mission_data),
+        _build_overhead_hold_config(flight_data, mission_data),
+        _build_shaper_config(_section(flight_data, "shaper")),
     )
 
 
@@ -438,6 +479,34 @@ def load_telemetry_config(path: str) -> TelemetryConfig:
         state_udp_port=int(merged.get("state_udp_port", 5010)),
         ui_enabled=_cfg_bool(merged, "ui_enabled", False, "telemetry"),
         log_level=str(merged.get("log_level", "INFO")),
+    )
+
+
+def _build_blackbox_config(data: dict[str, Any], args: argparse.Namespace) -> BlackboxConfig:
+    enabled = _cfg_bool(data, "enabled", False, "blackbox")
+    if args.blackbox_enabled is not None:
+        enabled = bool(args.blackbox_enabled)
+
+    output_dir = str(data.get("output_dir", "logs/blackbox"))
+    if args.blackbox_output_dir:
+        output_dir = args.blackbox_output_dir
+    output_path = Path(output_dir).expanduser()
+    if not output_path.is_absolute():
+        output_path = ROOT_DIR / output_path
+
+    return BlackboxConfig(
+        enabled=enabled,
+        output_dir=str(output_path),
+        sample_hz=float(data.get("sample_hz", 20.0)),
+        flush_every=max(1, int(data.get("flush_every", 20))),
+        rotate_mb=float(data.get("rotate_mb", 100.0)),
+        keep_files=max(0, int(data.get("keep_files", 20))),
+        include_perception=_cfg_bool(data, "include_perception", True, "blackbox"),
+        include_drone=_cfg_bool(data, "include_drone", True, "blackbox"),
+        include_gimbal=_cfg_bool(data, "include_gimbal", True, "blackbox"),
+        include_fused=_cfg_bool(data, "include_fused", True, "blackbox"),
+        include_commands=_cfg_bool(data, "include_commands", True, "blackbox"),
+        include_events=_cfg_bool(data, "include_events", True, "blackbox"),
     )
 
 
@@ -506,11 +575,13 @@ def _build_approach_track_config(
             kd_vy=float(body.get("kd_vy", 0.0)),
             use_derivative_vy=_cfg_bool(body, "use_derivative_vy", False, "body"),
             kp_yaw=float(body.get("kp_yaw", 1.2)),
+            kp_ex_cam_yaw=float(body.get("kp_ex_cam_yaw", 0.0)),
             kd_yaw=float(body.get("kd_yaw", 0.0)),
             use_derivative_yaw=_cfg_bool(body, "use_derivative_yaw", False, "body"),
             deadband_ex_body=float(body.get("deadband_ex_body", 0.02)),
             deadband_gimbal_yaw=float(body.get("deadband_gimbal_yaw", 0.02)),
             yaw_rate_damping=float(body.get("yaw_rate_damping", 0.0)),
+            yaw_step_rate=float(body.get("yaw_step_rate", 0.0)),
             max_vy=float(body.get("max_vy", 1.0)),
             max_yaw_rate=float(body.get("max_yaw_rate", 1.0)),
             vy_sign=float(body.get("vy_sign", 1.0)),
@@ -523,6 +594,8 @@ def _build_approach_track_config(
             kd_vx=float(approach.get("kd_vx", 0.0)),
             use_derivative=_cfg_bool(approach, "use_derivative", False, "approach"),
             deadband_size=float(approach.get("deadband_size", 0.02)),
+            ex_cam_slowdown_start=float(approach.get("ex_cam_slowdown_start", 0.15)),
+            max_ex_cam_for_approach=float(approach.get("max_ex_cam_for_approach", 0.35)),
             max_forward_vx=float(approach.get("max_forward_vx", 0.8)),
             max_backward_vx=float(approach.get("max_backward_vx", 0.2)),
             vx_sign=float(approach.get("vx_sign", 1.0)),
@@ -570,6 +643,20 @@ def _build_approach_track_config(
             "approach_track.gates",
         ),
         yaw_align_thresh_rad=float(gates.get("yaw_align_thresh_rad", 0.35)),
+        yaw_align_enter_thresh_rad=float(
+            gates.get(
+                "yaw_align_enter_thresh_rad",
+                min(float(gates.get("yaw_align_thresh_rad", 0.35)), 0.15),
+            )
+        ),
+        yaw_align_exit_thresh_rad=float(
+            gates.get(
+                "yaw_align_exit_thresh_rad",
+                float(gates.get("yaw_align_thresh_rad", 0.35)),
+            )
+        ),
+        yaw_align_hold_s=float(gates.get("yaw_align_hold_s", 0.4)),
+        min_yaw_quality=float(gates.get("min_yaw_quality", 0.0)),
     )
 
 
@@ -904,6 +991,7 @@ def _load_legacy_app_config(args: argparse.Namespace) -> AppConfig:
             lost_target_recenter_pitch_deg=float(control_cfg.gimbal.lost_target_recenter_pitch_deg),
             lost_target_recenter_yaw_deg=float(control_cfg.gimbal.lost_target_recenter_yaw_deg),
         ),
+        blackbox=_build_blackbox_config({}, args),
         control=control_cfg,
         telemetry=telemetry_cfg,
         yolo_command=yolo_command_cfg,
@@ -934,6 +1022,8 @@ def _load_legacy_app_config(args: argparse.Namespace) -> AppConfig:
         ),
         executor=executor_cfg,
         debug=FlightModeDebugConfig(force_mode=args.force_mode),
+        flight_modes_config_path=None,
+        mission_config_path=None,
         start_gimbal=bool(control_cfg.runtime.enable_gimbal_controller and args.start_auto_control),
         start_body=bool(control_cfg.runtime.enable_body_controller and args.start_auto_control),
         start_approach=bool(control_cfg.runtime.enable_approach_controller and args.start_auto_control),
@@ -995,6 +1085,10 @@ def _normalize_mission_config(data: dict[str, Any]) -> dict[str, Any]:
         "require_gimbal_fresh_for_gimbal",
         "require_gimbal_fresh_for_body",
         "require_gimbal_fresh_for_approach",
+        "yaw_align_enter_thresh_rad",
+        "yaw_align_exit_thresh_rad",
+        "yaw_align_hold_s",
+        "min_yaw_quality",
     ):
         if key in data:
             normalized[key] = data[key]

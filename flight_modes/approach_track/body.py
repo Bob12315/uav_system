@@ -64,6 +64,7 @@ class ApproachBodyController:
             )
             yaw_rate_cmd += self.config.yaw_sign * self.config.kd_yaw * d_gimbal_yaw
 
+        yaw_rate_cmd = self._apply_step(yaw_rate_cmd, self.config.yaw_step_rate)
         vy_cmd = self._clamp(vy_cmd, -self.config.max_vy, self.config.max_vy)
         yaw_rate_cmd = self._clamp(
             yaw_rate_cmd,
@@ -104,6 +105,15 @@ class ApproachBodyController:
         if not math.isfinite(value):
             return 0.0
         return min(upper, max(lower, value))
+
+    def _apply_step(self, value: float, step: float) -> float:
+        if not math.isfinite(value):
+            return 0.0
+        if not math.isfinite(step) or step <= 0.0:
+            return value
+        if math.isclose(value, 0.0, abs_tol=1e-9):
+            return 0.0
+        return math.copysign(math.ceil(abs(value) / step) * step, value)
 
     def _finite_or_zero(self, value: float) -> float:
         if not math.isfinite(value):

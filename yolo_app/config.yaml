@@ -35,7 +35,7 @@ udp_port: 5005
 # 自动选主目标策略，可选 center、biggest、class
 selection_mode: "class"
 
-# 当 selection_mode=class 时优先选择的类别名，例如 person、car、target
+# 当 selection_mode=class 时优先选择的类别名，例如 person,car,target
 target_class: "person"
 
 # 锁定目标连续丢失多少帧后判定为真正丢失并自动解锁

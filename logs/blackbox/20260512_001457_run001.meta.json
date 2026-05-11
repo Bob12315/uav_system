@@ -1,0 +1,14 @@
+{
+  "created_at": 1778516097.765934,
+  "format": "uav_project.blackbox.v1",
+  "data_file": "20260512_001457_run001.jsonl",
+  "sample_hz": 20.0,
+  "fields": {
+    "perception": true,
+    "drone": true,
+    "gimbal": true,
+    "fused": true,
+    "commands": true,
+    "events": true
+  }
+}

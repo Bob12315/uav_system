@@ -91,6 +91,11 @@ def _build_completion_candidates() -> tuple[str, ...]:
         "stop",
         "gimbal ",
         "gimbal_rate ",
+        "pid reload",
+        "flight reload",
+        "flight config reload",
+        "flight modes reload",
+        "flight_modes reload",
     }
     for root, controller, action in product(("controller", "controllers"), _CONTROLLERS, _ACTIONS):
         candidates.add(f"{root} {controller} {action}")
