@@ -84,6 +84,7 @@
 - `ey_body: float`
 - `gimbal_yaw: float`
 - `gimbal_pitch: float`
+- `yaw_rate: float`
 - `target_size: float`
 - `target_size_valid: bool`
 - `fusion_age_s: float`

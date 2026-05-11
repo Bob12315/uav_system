@@ -29,6 +29,8 @@ class FlightModeInput:
     gimbal_yaw: float = 0.0
     gimbal_pitch: float = 0.0
 
+    yaw_rate: float = 0.0
+
     target_size: float = 0.0
     target_size_valid: bool = False
 

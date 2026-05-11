@@ -5,6 +5,7 @@ import sys
 import time
 from collections import deque
 from dataclasses import dataclass
+from itertools import product
 from typing import Callable
 
 from command_dispatcher import CommandResult, dispatch_text_command
@@ -17,6 +18,133 @@ class UiCommandLog:
     command: str
     ok: bool
     message: str
+
+
+@dataclass(slots=True)
+class AutocompleteState:
+    seed: str = ""
+    matches: tuple[str, ...] = ()
+    index: int = -1
+
+
+@dataclass(slots=True)
+class AutocompleteResult:
+    buffer: str
+    cursor: int
+    state: AutocompleteState
+    message: str
+
+
+_ACTIONS = ("on", "off", "toggle", "enable", "disable", "enabled", "disabled", "1", "0", "true", "false", "tog")
+_CONTROLLERS = ("gimbal", "body", "approach", "all")
+_TASK_MODES = ("APPROACH_TRACK", "OVERHEAD_HOLD", "CORRIDOR_FOLLOW", "IDLE", "auto", "clear")
+_COMMON_FLIGHT_MODES = ("GUIDED", "LOITER", "RTL", "LAND", "STABILIZE", "ALT_HOLD", "AUTO")
+_MESSAGE_NAMES = (
+    "ATTITUDE",
+    "GLOBAL_POSITION_INT",
+    "LOCAL_POSITION_NED",
+    "VFR_HUD",
+    "BATTERY_STATUS",
+    "GIMBAL_DEVICE_ATTITUDE_STATUS",
+)
+
+
+def _build_completion_candidates() -> tuple[str, ...]:
+    candidates = {
+        "quit",
+        "exit",
+        "target ",
+        "target next",
+        "target prev",
+        "target previous",
+        "target lock ",
+        "target unlock",
+        "control ",
+        "control send ",
+        "control send_commands ",
+        "control commands ",
+        "switch_source ",
+        "switch_source real",
+        "switch_source sitl",
+        "mode ",
+        "arm",
+        "arm throttle",
+        "disarm",
+        "takeoff ",
+        "land",
+        "condition_yaw ",
+        "change_speed ",
+        "set_home ",
+        "set_home current",
+        "global_goto ",
+        "local_pos ",
+        "reposition ",
+        "set_roi_location ",
+        "roi_none",
+        "roi_none ",
+        "gimbal_manager_configure",
+        "gimbal_manager_configure ",
+        "set_message_interval ",
+        "message_interval ",
+        "body_vel ",
+        "yaw_rate ",
+        "stop",
+        "gimbal ",
+        "gimbal_rate ",
+    }
+    for root, controller, action in product(("controller", "controllers"), _CONTROLLERS, _ACTIONS):
+        candidates.add(f"{root} {controller} {action}")
+    for command, action in product(("control send", "control send_commands", "control commands"), _ACTIONS):
+        candidates.add(f"{command} {action}")
+    for root, mode in product(("task", "mission"), _TASK_MODES):
+        candidates.add(f"{root} {mode}")
+        candidates.add(f"{root} mode {mode}")
+    for mode in _COMMON_FLIGHT_MODES:
+        candidates.add(f"mode {mode}")
+    for speed_type in ("ground", "air", "climb", "descent"):
+        candidates.add(f"change_speed {speed_type}")
+    for frame in ("relative", "global", "terrain"):
+        candidates.add(f"global_goto {frame}")
+    for frame in ("local", "offset", "body", "body_offset"):
+        candidates.add(f"local_pos {frame}")
+    for yaw_option in ("cw", "ccw", "shortest", "absolute", "relative"):
+        candidates.add(f"condition_yaw {yaw_option}")
+    for message in _MESSAGE_NAMES:
+        candidates.add(f"set_message_interval {message} ")
+        candidates.add(f"message_interval {message} ")
+        candidates.add(f"set_message_interval {message} default")
+        candidates.add(f"message_interval {message} default")
+    for yaw_mode in ("follow", "lock"):
+        candidates.add(f"gimbal_rate {yaw_mode}")
+    return tuple(sorted(candidates, key=lambda item: item.lower()))
+
+
+_COMMAND_COMPLETIONS = _build_completion_candidates()
+
+
+def complete_command_input(buffer: str, cursor: int, state: AutocompleteState | None = None) -> AutocompleteResult:
+    state = state or AutocompleteState()
+    cursor = max(0, min(cursor, len(buffer)))
+    prefix = buffer[:cursor]
+    suffix = buffer[cursor:]
+    current_match = state.matches[state.index] if 0 <= state.index < len(state.matches) else ""
+    if state.matches and prefix in {state.seed, current_match}:
+        matches = state.matches
+        index = (state.index + 1) % len(matches)
+    else:
+        lowered = prefix.lower()
+        matches = tuple(candidate for candidate in _COMMAND_COMPLETIONS if candidate.lower().startswith(lowered))
+        index = 0
+    if not matches:
+        return AutocompleteResult(buffer, cursor, AutocompleteState(), "no completion")
+    candidate = matches[index]
+    next_buffer = candidate + suffix
+    next_state = AutocompleteState(seed=prefix, matches=matches, index=index)
+    if len(matches) == 1:
+        message = f"completion 1/1: {candidate}"
+    else:
+        message = f"completion {index + 1}/{len(matches)}: {candidate}"
+    return AutocompleteResult(next_buffer, len(candidate), next_state, message)
 
 
 def run_terminal_ui(
@@ -57,6 +185,8 @@ class _TelemetryTerminalUi:
         self.history_index: int | None = None
         self.command_log: deque[UiCommandLog] = deque(maxlen=80)
         self.last_draw = 0.0
+        self.autocomplete_state = AutocompleteState()
+        self.autocomplete_message = ""
 
     def run(self) -> None:
         curses.curs_set(1)
@@ -141,10 +271,13 @@ class _TelemetryTerminalUi:
             self._history_prev()
         elif ch == curses.KEY_DOWN:
             self._history_next()
+        elif ch == "\t":
+            self._autocomplete()
         elif ch == curses.KEY_RESIZE:
             return
         elif isinstance(ch, str) and ch.isprintable():
             self._leave_history()
+            self._reset_autocomplete()
             self._insert_text(ch)
 
     def _handle_escape_sequence(self) -> bool:
@@ -189,6 +322,7 @@ class _TelemetryTerminalUi:
         if not normalized:
             return
         self._leave_history()
+        self._reset_autocomplete()
         prefix = " " if self.input_buffer and self.input_cursor == len(self.input_buffer) and not self.input_buffer.endswith(" ") else ""
         self._insert_text(prefix + normalized)
 
@@ -205,6 +339,7 @@ class _TelemetryTerminalUi:
     def _delete_before_cursor(self) -> None:
         if self.input_cursor <= 0:
             return
+        self._reset_autocomplete()
         self.input_buffer = (
             self.input_buffer[: self.input_cursor - 1]
             + self.input_buffer[self.input_cursor :]
@@ -214,6 +349,7 @@ class _TelemetryTerminalUi:
     def _delete_at_cursor(self) -> None:
         if self.input_cursor >= len(self.input_buffer):
             return
+        self._reset_autocomplete()
         self.input_buffer = (
             self.input_buffer[: self.input_cursor]
             + self.input_buffer[self.input_cursor + 1 :]
@@ -240,6 +376,7 @@ class _TelemetryTerminalUi:
         self.input_cursor = 0
         self.draft_buffer = ""
         self.history_index = None
+        self._reset_autocomplete()
         if command in {"quit", "exit"}:
             self.stop_event.set()
             return
@@ -267,6 +404,7 @@ class _TelemetryTerminalUi:
             self.history_index = max(0, self.history_index - 1)
         self.input_buffer = self.history[self.history_index]
         self.input_cursor = len(self.input_buffer)
+        self._reset_autocomplete()
 
     def _history_next(self) -> None:
         if self.history_index is None:
@@ -276,15 +414,29 @@ class _TelemetryTerminalUi:
             self.input_buffer = self.draft_buffer
             self.input_cursor = len(self.input_buffer)
             self.draft_buffer = ""
+            self._reset_autocomplete()
             return
         self.history_index += 1
         self.input_buffer = self.history[self.history_index]
         self.input_cursor = len(self.input_buffer)
+        self._reset_autocomplete()
 
     def _leave_history(self) -> None:
         if self.history_index is not None:
             self.history_index = None
             self.draft_buffer = ""
+
+    def _autocomplete(self) -> None:
+        self._leave_history()
+        result = complete_command_input(self.input_buffer, self.input_cursor, self.autocomplete_state)
+        self.input_buffer = result.buffer
+        self.input_cursor = result.cursor
+        self.autocomplete_state = result.state
+        self.autocomplete_message = result.message
+
+    def _reset_autocomplete(self) -> None:
+        self.autocomplete_state = AutocompleteState()
+        self.autocomplete_message = ""
 
     def _draw(self) -> None:
         height, width = self.stdscr.getmaxyx()
@@ -403,7 +555,9 @@ class _TelemetryTerminalUi:
         return visible, min(width - 1, max(0, cursor_col))
 
     def _draw_status_line(self, y: int, width: int) -> None:
-        text = "Enter sends manual command. Up/Down history. Esc/Ctrl-C exits UI."
+        text = "Enter sends command. Tab completes. Up/Down history. Esc/Ctrl-C exits UI."
+        if self.autocomplete_message:
+            text = f"{text} {self.autocomplete_message}"
         self._addstr(y, 0, text[: width - 1], curses.A_DIM)
 
     def _addstr(self, y: int, x: int, text: str, attr: int = 0) -> None:

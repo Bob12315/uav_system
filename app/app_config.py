@@ -510,6 +510,7 @@ def _build_approach_track_config(
             use_derivative_yaw=_cfg_bool(body, "use_derivative_yaw", False, "body"),
             deadband_ex_body=float(body.get("deadband_ex_body", 0.02)),
             deadband_gimbal_yaw=float(body.get("deadband_gimbal_yaw", 0.02)),
+            yaw_rate_damping=float(body.get("yaw_rate_damping", 0.0)),
             max_vy=float(body.get("max_vy", 1.0)),
             max_yaw_rate=float(body.get("max_yaw_rate", 1.0)),
             vy_sign=float(body.get("vy_sign", 1.0)),

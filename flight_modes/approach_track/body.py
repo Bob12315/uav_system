@@ -44,6 +44,9 @@ class ApproachBodyController:
 
         vy_cmd = self.config.vy_sign * self.config.kp_vy * ex_body
         yaw_rate_cmd = self.config.yaw_sign * self.config.kp_yaw * gimbal_yaw
+        yaw_rate_cmd -= self.config.yaw_rate_damping * self._finite_or_zero(
+            float(inputs.yaw_rate)
+        )
 
         if self.config.use_derivative_vy:
             d_ex_body = self._compute_derivative(
@@ -102,6 +105,11 @@ class ApproachBodyController:
             return 0.0
         return min(upper, max(lower, value))
 
+    def _finite_or_zero(self, value: float) -> float:
+        if not math.isfinite(value):
+            return 0.0
+        return value
+
     def _compute_derivative(
         self,
         value: float,
@@ -118,4 +126,3 @@ class ApproachBodyController:
 
     def _make_inactive_command(self, valid: bool) -> ApproachBodyCommand:
         return ApproachBodyCommand(active=False, valid=valid)
-

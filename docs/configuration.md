@@ -78,7 +78,7 @@ recovery:
 - `input_adapter`：dt、age、低通滤波、target stable。
 - `approach_track.gates`：斜视接近各控制通道放行条件。
 - `approach_track.gimbal`：斜视接近云台控制参数。
-- `approach_track.body`：斜视接近横移和机体偏航参数。
+- `approach_track.body`：斜视接近横移和机体偏航参数，`yaw_rate_damping` 用当前飞机 yaw 速率给偏航速率指令加阻尼，减小延迟导致的冲过。
 - `approach_track.forward`：斜视接近前向速度参数。
 - `overhead_hold.gates`：正上方悬停各控制通道放行条件。
 - `overhead_hold.gimbal`：正上方悬停云台角度目标。

@@ -36,6 +36,7 @@ class ApproachBodyConfig:
     use_derivative_yaw: bool = False
     deadband_ex_body: float = 0.02
     deadband_gimbal_yaw: float = 0.02
+    yaw_rate_damping: float = 0.0
     max_vy: float = 1.0
     max_yaw_rate: float = 1.0
     vy_sign: float = 1.0
@@ -73,4 +74,3 @@ class ApproachTrackConfig:
     require_gimbal_fresh_for_body: bool = True
     require_gimbal_fresh_for_approach: bool = True
     yaw_align_thresh_rad: float = 0.35
-

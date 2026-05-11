@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from flight_modes.approach_track import ApproachTrackMode
+from flight_modes.approach_track.body import ApproachBodyController
+from flight_modes.approach_track.config import ApproachBodyConfig
 from flight_modes.common.types import FlightModeInput
 
 
@@ -55,3 +57,17 @@ def test_approach_track_zeroes_when_target_invalid() -> None:
     assert command.gimbal_yaw_rate_cmd == pytest.approx(0.0)
     assert status.hold_reason == "no_target"
 
+
+def test_body_yaw_rate_damping_brakes_existing_yaw_motion() -> None:
+    controller = ApproachBodyController(
+        config=ApproachBodyConfig(
+            kp_yaw=1.2,
+            yaw_rate_damping=0.8,
+            deadband_ex_body=0.0,
+            deadband_gimbal_yaw=0.0,
+        )
+    )
+
+    command = controller.update(_inputs(gimbal_yaw=0.1, yaw_rate=0.1))
+
+    assert command.yaw_rate_cmd == pytest.approx(0.04)

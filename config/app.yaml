@@ -9,8 +9,8 @@ runtime:
   log_level: INFO
 
 services:
-  ui_enabled: false
-  connect_telemetry: false
+  ui_enabled: true
+  connect_telemetry: true
   start_yolo_udp: true
 
 executor:

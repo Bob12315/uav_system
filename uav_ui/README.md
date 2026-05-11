@@ -50,6 +50,7 @@ python -m telemetry_link.main
 常用按键：
 
 - `Enter`：发送当前命令
+- `Tab`：自动补全命令；多个候选时连续按 `Tab` 循环切换
 - `Up / Down`：浏览命令历史
 - `Esc` 或 `Ctrl-C`：退出 UI
 - `quit` 或 `exit`：退出 UI

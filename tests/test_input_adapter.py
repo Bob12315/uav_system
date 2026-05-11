@@ -54,3 +54,10 @@ def test_source_ages_are_computed_from_time_fn() -> None:
     assert result.drone_age_s == pytest.approx(2.0)
     assert result.gimbal_age_s == pytest.approx(2.5)
 
+
+def test_yaw_rate_is_passed_through_from_fused_state() -> None:
+    adapter = FlightModeInputAdapter()
+
+    result = adapter.adapt(FusedState(timestamp=1.0, yaw_rate=0.23))
+
+    assert result.yaw_rate == pytest.approx(0.23)

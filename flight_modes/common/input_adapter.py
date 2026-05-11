@@ -133,6 +133,7 @@ class FlightModeInputAdapter:
             ey_body=ey_body,
             gimbal_yaw=gimbal_yaw,
             gimbal_pitch=gimbal_pitch,
+            yaw_rate=float(fused.yaw_rate),
             target_size=target_size,
             target_size_valid=target_size_valid,
             fusion_age_s=self._compute_age(now, fused.timestamp),
@@ -231,4 +232,3 @@ class FlightModeInputAdapter:
         if not math.isfinite(value) or value <= 0.0:
             return None
         return value
-
