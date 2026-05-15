@@ -28,7 +28,7 @@ blackbox:
   include_events: true
 
 executor:
-  body_frame: 1
+  body_frame: 8
   gimbal_roll_deg: 0.0
   log_commands: true
   send_commands: false

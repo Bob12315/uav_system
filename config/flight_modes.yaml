@@ -42,7 +42,7 @@ approach_track:
     pitch_sign: -1.0                            # 云台 pitch 方向符号，方向反了改成 1
 
   body:
-    kp_yaw: 0.2                                 # 机体 yaw 跟随云台 yaw 的比例增益
+    kp_yaw: 0.1                                 # 机体 yaw 跟随云台 yaw 的比例增益
     kp_ex_cam_yaw: 0.4                          # 图像横向误差给机体 yaw 的提前转向增益
     yaw_rate_damping: 0.8                       # 用实际 yaw_rate 做阻尼，减小延迟过冲
     yaw_step_rate: 0.00                         # yaw 指令量化步长，0 表示不量化
@@ -51,7 +51,7 @@ approach_track:
     yaw_sign: 1.0                               # 机体 yaw 方向符号，方向反了改成 -1
 
   forward:
-    target_size_ref: 0.6                        # 调试：提高期望尺寸，让当前距离更容易产生前进 vx
+    target_size_ref: 0.2                        # 调试：提高期望尺寸，让当前距离更容易产生前进 vx
     kp_vx: 4.0                                  # 前进比例增益，越大接近越积极
     deadband_size: 0.0                          # 调试：取消尺寸死区，便于观察小的 vx 输出
     ex_cam_slowdown_start: 999.0                # 调试：基本不因横向偏差降低前进速度
