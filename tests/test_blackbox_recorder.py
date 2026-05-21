@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from app.app_config import BlackboxConfig
 from app.blackbox_recorder import BlackboxRecorder
-from flight_modes.common.types import FlightCommand, FlightModeInput
+from missions.common.control.types import FlightCommand, MissionStageInput
 from fusion.models import FusedState, PerceptionTarget
 from telemetry_link.models import DroneState, GimbalState, LinkStatus
 
@@ -59,7 +59,7 @@ def test_blackbox_recorder_writes_control_cycle_jsonl(tmp_path) -> None:
         gimbal=GimbalState(gimbal_valid=True, yaw=3.0, pitch=-20.0, roll=0.0),
         link=LinkStatus(connected=True, target_system=1, target_component=1),
         fused=FusedState(target_valid=True, ex_cam=-0.12, ey_cam=0.04, state_valid=True),
-        inputs=FlightModeInput(dt=0.05, target_valid=True, control_allowed=True),
+        inputs=MissionStageInput(dt=0.05, target_valid=True, control_allowed=True),
         mission=SimpleNamespace(active_mode="APPROACH_TRACK", hold_reason=""),
         health=SimpleNamespace(hold_reason="ok"),
         mode_status=SimpleNamespace(mode_name="APPROACH_TRACK", hold_reason=""),

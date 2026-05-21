@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import pytest
 
-from flight_modes.approach_track import ApproachTrackMode
-from flight_modes.approach_track.body import ApproachBodyController
-from flight_modes.approach_track.gimbal import ApproachGimbalController
-from flight_modes.approach_track.config import (
+from missions.visual_tracking.stages.approach_track import ApproachTrackMode
+from missions.visual_tracking.stages.approach_track.body import ApproachBodyController
+from missions.visual_tracking.stages.approach_track.gimbal import ApproachGimbalController
+from missions.visual_tracking.stages.approach_track.config import (
     ApproachBodyConfig,
     ApproachForwardConfig,
     ApproachGimbalConfig,
     ApproachTrackConfig,
 )
-from flight_modes.common.types import FlightModeInput
+from missions.common.control.types import MissionStageInput
 
 
-def _inputs(**overrides) -> FlightModeInput:
+def _inputs(**overrides) -> MissionStageInput:
     data = dict(
         timestamp=1.0,
         dt=0.02,
@@ -40,7 +40,7 @@ def _inputs(**overrides) -> FlightModeInput:
         gimbal_age_s=0.01,
     )
     data.update(overrides)
-    return FlightModeInput(**data)
+    return MissionStageInput(**data)
 
 
 def test_approach_track_maps_errors_to_raw_command() -> None:

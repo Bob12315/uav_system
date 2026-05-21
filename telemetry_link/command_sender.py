@@ -279,6 +279,23 @@ class CommandSender(threading.Thread):
                     command.params.get("primary_compid"),
                 )
                 self.client.send_raw_message(lambda master: self._send_gimbal_manager_configure(master, command))
+            elif command.action_type == ActionType.SET_SERVO:
+                self.logger.info(
+                    "sending action command=set_servo channel=%s pwm=%s",
+                    int(command.params["channel"]),
+                    int(command.params["pwm"]),
+                )
+                self.client.send_raw_message(lambda master: self._send_set_servo(master, command))
+            elif command.action_type == ActionType.SET_RELAY:
+                self.logger.info(
+                    "sending action command=set_relay relay_id=%s state=%s",
+                    int(command.params["relay_id"]),
+                    bool(command.params["state"]),
+                )
+                self.client.send_raw_message(lambda master: self._send_set_relay(master, command))
+            elif command.action_type == ActionType.RELEASE_PAYLOAD:
+                payload_id = int(command.params["payload_id"])
+                raise ValueError(f"payload release mapping is not configured: payload_id={payload_id}")
             elif command.action_type == ActionType.GIMBAL_ANGLE:
                 self.logger.info(
                     "sending action command=gimbal_angle pitch=%.2f yaw=%.2f roll=%.2f mount_mode=%s",
@@ -510,6 +527,36 @@ class CommandSender(threading.Thread):
                 0.0,
                 0.0,
                 float(command.params.get("gimbal_device_id", 0)),
+            ],
+        )
+
+    def _send_set_servo(self, master, command: ActionCommand) -> None:
+        self._command_long(
+            master,
+            mavutil.mavlink.MAV_CMD_DO_SET_SERVO,
+            [
+                float(command.params["channel"]),
+                float(command.params["pwm"]),
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ],
+        )
+
+    def _send_set_relay(self, master, command: ActionCommand) -> None:
+        self._command_long(
+            master,
+            mavutil.mavlink.MAV_CMD_DO_SET_RELAY,
+            [
+                float(command.params["relay_id"]),
+                1.0 if bool(command.params["state"]) else 0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
             ],
         )
 

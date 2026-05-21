@@ -114,6 +114,30 @@ python -m app.main --connect-telemetry --force-mode OVERHEAD_HOLD --send-command
 python -m app.main --no-yolo-udp --run-seconds 2 --send-commands false
 ```
 
+选择 mission：
+
+```bash
+python -m app.main --mission-name visual_tracking --send-commands false
+```
+
+使用指定 mission 配置：
+
+```bash
+python -m app.main --mission-config missions/visual_tracking/config.yaml --send-commands false
+```
+
+rescue competition 骨架 dry-run：
+
+```bash
+python -m app.main \
+  --mission-config missions/rescue_competition/config.yaml \
+  --no-yolo-udp \
+  --run-seconds 2 \
+  --send-commands false
+```
+
+注意：`rescue_competition` 默认 `auto_start: false`，不会自动起飞。它目前是阶段框架，不是完整比赛自动化。
+
 ## 8. 排查提示
 
 没有 UI：

@@ -14,7 +14,7 @@
 ## 必须经过的控制链路
 
 ```text
-FlightMode
+MissionStage
   -> raw FlightCommand
   -> CommandShaper
   -> shaped FlightCommand

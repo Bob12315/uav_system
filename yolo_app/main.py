@@ -12,7 +12,7 @@ import cv2
 from annotator import Annotator
 from command_receiver import CommandReceiver
 from config import load_config
-from target_manager import TargetManager
+from target_manager import TargetManager, build_scene_detections
 from tracker_runner import TrackerRunner
 from udp_publisher import UdpPublisher
 from utils import ensure_parent_dir
@@ -56,7 +56,14 @@ def main() -> int:
                 frame_id=packet.frame_id,
                 timestamp=packet.timestamp,
             )
-            udp_publisher.publish(current_target)
+            scene = build_scene_detections(
+                tracks=tracks,
+                image_width=image_width,
+                image_height=image_height,
+                frame_id=packet.frame_id,
+                timestamp=packet.timestamp,
+            )
+            udp_publisher.publish(current_target, scene)
 
             if cfg.show or cfg.save_video:
                 annotated = annotator.annotate(

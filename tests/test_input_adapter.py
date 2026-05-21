@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from flight_modes.common.input_adapter import FlightModeInputAdapter, InputAdapterConfig
+from missions.common.control.input_adapter import StageInputAdapter, InputAdapterConfig
 from fusion.models import FusedState
 
 
 def test_invalid_timestamp_uses_default_dt() -> None:
-    adapter = FlightModeInputAdapter(config=InputAdapterConfig(dt_default=0.05))
+    adapter = StageInputAdapter(config=InputAdapterConfig(dt_default=0.05))
 
     result = adapter.adapt(FusedState(timestamp=0.0))
 
@@ -15,7 +15,7 @@ def test_invalid_timestamp_uses_default_dt() -> None:
 
 
 def test_track_id_change_sets_track_switched() -> None:
-    adapter = FlightModeInputAdapter()
+    adapter = StageInputAdapter()
 
     adapter.adapt(FusedState(timestamp=1.0, track_id=1))
     result = adapter.adapt(FusedState(timestamp=1.02, track_id=2))
@@ -24,7 +24,7 @@ def test_track_id_change_sets_track_switched() -> None:
 
 
 def test_target_stable_after_hold_time() -> None:
-    adapter = FlightModeInputAdapter(config=InputAdapterConfig(stable_hold_s=0.3))
+    adapter = StageInputAdapter(config=InputAdapterConfig(stable_hold_s=0.3))
 
     first = adapter.adapt(
         FusedState(timestamp=1.0, target_valid=True, target_locked=True, track_id=4)
@@ -38,7 +38,7 @@ def test_target_stable_after_hold_time() -> None:
 
 
 def test_source_ages_are_computed_from_time_fn() -> None:
-    adapter = FlightModeInputAdapter(_time_fn=lambda: 10.0)
+    adapter = StageInputAdapter(_time_fn=lambda: 10.0)
 
     result = adapter.adapt(
         FusedState(
@@ -56,7 +56,7 @@ def test_source_ages_are_computed_from_time_fn() -> None:
 
 
 def test_yaw_rate_is_passed_through_from_fused_state() -> None:
-    adapter = FlightModeInputAdapter()
+    adapter = StageInputAdapter()
 
     result = adapter.adapt(FusedState(timestamp=1.0, yaw_rate=0.23))
 

@@ -37,7 +37,8 @@ class AutocompleteResult:
 
 _ACTIONS = ("on", "off", "toggle", "enable", "disable", "enabled", "disabled", "1", "0", "true", "false", "tog")
 _CONTROLLERS = ("gimbal", "body", "approach", "all")
-_TASK_MODES = ("APPROACH_TRACK", "OVERHEAD_HOLD", "CORRIDOR_FOLLOW", "IDLE", "auto", "clear")
+_STAGE_CONTROLLERS = ("APPROACH_TRACK", "OVERHEAD_HOLD", "CORRIDOR_FOLLOW", "IDLE", "auto", "clear")
+_MISSIONS = ("visual_tracking", "rescue_competition")
 _COMMON_FLIGHT_MODES = ("GUIDED", "LOITER", "RTL", "LAND", "STABILIZE", "ALT_HOLD", "AUTO")
 _MESSAGE_NAMES = (
     "ATTITUDE",
@@ -92,18 +93,27 @@ def _build_completion_candidates() -> tuple[str, ...]:
         "gimbal ",
         "gimbal_rate ",
         "pid reload",
-        "flight reload",
-        "flight config reload",
-        "flight modes reload",
-        "flight_modes reload",
+        "stage reload",
+        "stage config reload",
+        "stage controllers reload",
+        "mission list",
+        "mission current",
+        "mission status",
+        "mission start",
+        "mission reset",
+        "mission switch ",
+        "mission select ",
+        "mission use ",
     }
     for root, controller, action in product(("controller", "controllers"), _CONTROLLERS, _ACTIONS):
         candidates.add(f"{root} {controller} {action}")
     for command, action in product(("control send", "control send_commands", "control commands"), _ACTIONS):
         candidates.add(f"{command} {action}")
-    for root, mode in product(("task", "mission"), _TASK_MODES):
+    for root, mode in product(("stage",), _STAGE_CONTROLLERS):
         candidates.add(f"{root} {mode}")
         candidates.add(f"{root} mode {mode}")
+    for command, mission in product(("mission switch", "mission select", "mission use"), _MISSIONS):
+        candidates.add(f"{command} {mission}")
     for mode in _COMMON_FLIGHT_MODES:
         candidates.add(f"mode {mode}")
     for speed_type in ("ground", "air", "climb", "descent"):
@@ -155,7 +165,7 @@ def complete_command_input(buffer: str, cursor: int, state: AutocompleteState | 
 def run_terminal_ui(
     manager: LinkManager,
     stop_event,
-    control_command_lines: Callable[[], list[str]] | None = None,
+    mission_control_lines: Callable[[], list[str]] | None = None,
     command_handler: Callable[[str], CommandResult] | None = None,
 ) -> None:
     curses.wrapper(
@@ -163,7 +173,7 @@ def run_terminal_ui(
             stdscr,
             manager,
             stop_event,
-            control_command_lines,
+            mission_control_lines,
             command_handler,
         ).run()
     )
@@ -175,13 +185,13 @@ class _TelemetryTerminalUi:
         stdscr,
         manager: LinkManager,
         stop_event,
-        control_command_lines: Callable[[], list[str]] | None,
+        mission_control_lines: Callable[[], list[str]] | None,
         command_handler: Callable[[str], CommandResult] | None,
     ) -> None:
         self.stdscr = stdscr
         self.manager = manager
         self.stop_event = stop_event
-        self.control_command_lines = control_command_lines
+        self.mission_control_lines = mission_control_lines
         self.command_handler = command_handler or (lambda command: dispatch_text_command(self.manager, command))
         self.input_buffer = ""
         self.input_cursor = 0
@@ -458,12 +468,12 @@ class _TelemetryTerminalUi:
         control_height = top_height - command_height
         self._draw_box(0, 0, top_height, left_width, "Latest telemetry")
         self._draw_box(0, left_width, command_height, right_width, "Manual commands")
-        self._draw_box(command_height, left_width, control_height, right_width, "Control output")
+        self._draw_box(command_height, left_width, control_height, right_width, "Mission control")
         self._draw_input_line(height - 3, width)
         self._draw_status_line(height - 1, width)
         self._draw_latest(1, 2, top_height - 2, left_width - 4)
         self._draw_commands(1, left_width + 2, command_height - 2, right_width - 4)
-        self._draw_control_output(
+        self._draw_mission_control(
             command_height + 1,
             left_width + 2,
             control_height - 2,
@@ -524,13 +534,13 @@ class _TelemetryTerminalUi:
             attr = curses.color_pair(1) if item.ok else curses.color_pair(2)
             self._addstr(y + index, x, line[:w], attr)
 
-    def _draw_control_output(self, y: int, x: int, h: int, w: int) -> None:
-        if self.control_command_lines is None:
-            self._addstr(y, x, "No control output source.", curses.A_DIM)
+    def _draw_mission_control(self, y: int, x: int, h: int, w: int) -> None:
+        if self.mission_control_lines is None:
+            self._addstr(y, x, "No mission control source.", curses.A_DIM)
             return
-        lines = self.control_command_lines()
+        lines = self.mission_control_lines()
         if not lines:
-            self._addstr(y, x, "Waiting for control commands...", curses.A_DIM)
+            self._addstr(y, x, "Waiting for mission control...", curses.A_DIM)
             return
         for index, line in enumerate(lines[:h]):
             self._addstr(y + index, x, line[:w], self._line_attr(line))

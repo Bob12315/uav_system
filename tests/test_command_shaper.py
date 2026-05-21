@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from flight_modes.common.command_shaper import CommandShaper, CommandShaperConfig
-from flight_modes.common.types import FlightCommand
+from missions.common.control.command_shaper import CommandShaper, CommandShaperConfig
+from missions.common.control.types import FlightCommand
 
 
 def test_limits_body_and_gimbal_channels() -> None:

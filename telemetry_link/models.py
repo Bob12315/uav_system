@@ -28,6 +28,9 @@ class ActionType(str, Enum):
     SET_ROI_LOCATION = "set_roi_location"
     ROI_NONE = "roi_none"
     GIMBAL_MANAGER_CONFIGURE = "gimbal_manager_configure"
+    SET_SERVO = "set_servo"
+    SET_RELAY = "set_relay"
+    RELEASE_PAYLOAD = "release_payload"
 
 
 @dataclass(slots=True)
@@ -65,6 +68,9 @@ class DroneState:
     vx: float = 0.0
     vy: float = 0.0
     vz: float = 0.0
+    local_x: float = 0.0
+    local_y: float = 0.0
+    local_z: float = 0.0
     velocity_source: str = "ekf"
     velocity_quality: str = "poor"
     altitude: float = 0.0

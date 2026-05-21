@@ -1,10 +1,10 @@
 # 配置说明
 
-新架构默认读取 `config/` 下的配置。旧 `control/config.yaml` 保留用于旧入口兼容。
+新架构把配置分成两层：`config/` 只放系统配置；每个 mission 的任务参数和阶段参数放在自己的 `missions/<mission_name>/config.yaml`。旧 `control/config.yaml` 保留用于旧入口兼容。
 
 ## config/app.yaml
 
-进程运行、服务开关和 executor 安全出口。
+进程运行、服务开关、mission 选择和 executor 安全出口。
 
 ```yaml
 runtime:
@@ -22,6 +22,9 @@ services:
   connect_telemetry: false
   start_yolo_udp: true
 
+mission:
+  name: visual_tracking
+
 executor:
   send_commands: false
 ```
@@ -31,10 +34,11 @@ executor:
 - `start_yolo_udp`：是否监听 YOLO UDP。
 - `send_commands`：默认必须为 false；实发时必须显式打开。
 - `run_seconds`：自动退出秒数，适合 smoke test。
+- `mission.name`：当前运行的 mission 名称，默认 `visual_tracking`。
 
-## config/mission.yaml
+## missions/visual_tracking/config.yaml
 
-任务状态机、模式切换条件和正常恢复策略。
+视觉跟踪 mission 的模式切换条件、正常恢复策略，以及该 mission 使用的阶段控制参数。
 
 ```yaml
 initial_mode: "APPROACH_TRACK"
@@ -69,9 +73,36 @@ recovery:
 - `transitions`：模式间切换阈值。
 - `recovery.lost_target`：丢目标后的正常恢复动作。
 
-## config/flight_modes.yaml
+## missions/rescue_competition/config.yaml
 
-飞行模式和通用控制参数。
+比赛任务骨架配置。当前只提供框架，不代表已完成比赛自动化。
+
+常用项：
+
+```yaml
+name: rescue_competition
+initial_stage: PREPARE
+auto_start: false
+takeoff_altitude_m: 5.0
+local_position_frame: 1
+align_mode: OVERHEAD_HOLD
+scan_duration_s: 3.0
+land_complete_altitude_m: 0.3
+route: []
+drop_zones: []
+recce_zones: []
+payloads: []
+```
+
+- `auto_start`：默认 false，避免加载 rescue mission 后自动起飞。
+- `route`：任务相对本地坐标航点，mission 会在开始时记录 EKF local origin。
+- `payloads`：投放载荷列表，mission 只请求 `release_payload`，具体舵机/继电器映射仍属于 telemetry/action 层。
+- `scan_duration_s`：侦察扫描占位阶段持续时间。
+- `land_complete_altitude_m`：降落完成的相对高度阈值。
+
+## missions/<mission_name>/config.yaml
+
+mission 阶段控制器和通用控制参数。
 
 主要分区：
 
@@ -86,7 +117,7 @@ recovery:
 - `overhead_hold.longitudinal`：正上方悬停前后平移参数。
 - `shaper`：最终命令限幅和 slew rate。
 
-app 带 UI 运行时，修改本文件后可以在 UI 输入 `pid reload` 或 `flight reload`，将上述 flight mode 参数重载进当前进程。重载会更新正在运行的 controller，并重置积分/微分历史和 command shaper 状态；不会修改 YAML 文件。
+app 带 UI 运行时，修改本文件后可以在 UI 输入 `pid reload` 或 `stage reload`，将上述 mission stage 参数重载进当前进程。重载会更新正在运行的 controller，并重置积分/微分历史和 command shaper 状态；不会修改 YAML 文件。
 
 ## config/telemetry.yaml
 

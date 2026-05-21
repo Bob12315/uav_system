@@ -17,10 +17,9 @@
 
 应该改：
 
-- `flight_modes/approach_track/`
-- `flight_modes/overhead_hold/`
-- `flight_modes/corridor_follow/`
-- `config/flight_modes.yaml`
+- `missions/<mission_name>/stages/<stage_name>/`
+- `missions/common/control/`
+- `missions/<mission_name>/config.yaml`
 - 对应 `tests/test_*.py`
 
 不应该碰：
@@ -32,18 +31,19 @@
 
 要求：
 
-- mode 输出 `FlightCommand`。
-- 新参数放到对应 config dataclass 和 `config/flight_modes.yaml`。
+- stage controller 输出 `FlightCommand`。
+- 新参数放到对应 config dataclass 和 `missions/<mission_name>/config.yaml`。
 - 添加或更新单元测试。
 
 ## 修改任务流程时
 
 应该改：
 
-- `app/mission_manager.py`
-- `app/mode_registry.py`
-- `config/mission.yaml`
-- `tests/test_mission_manager.py`
+- `missions/`
+- `app/mission_runner.py`
+- `app/system_runner.py`，仅当调度接口变化。
+- `missions/<mission_name>/config.yaml`
+- `tests/test_*mission*.py`
 
 不应该碰：
 
@@ -53,7 +53,8 @@
 
 要求：
 
-- mission manager 只选择 active mode，不计算速度。
+- mission 只选择阶段、active mode 和通用 action，不计算速度。
+- 任务动作必须用 `MissionAction`，由 `MissionRunner` 转发。
 - 新状态必须有清晰进入/退出条件。
 
 ## 修改 MAVLink 或飞控通讯时
@@ -67,7 +68,7 @@
 
 不应该碰：
 
-- `flight_modes/<mode>/` 控制算法。
+- `missions/<mission_name>/stages/<stage_name>/` 控制算法。
 - `fusion/`。
 - `yolo_app/`。
 
@@ -90,8 +91,8 @@
 不应该碰：
 
 - `telemetry_link/`
-- `flight_modes/`
-- `app/mission_manager.py`
+- `missions/<mission_name>/stages/`
+- `missions/`
 
 要求：
 
@@ -108,7 +109,7 @@
 不应该碰：
 
 - MAVLink 发送器。
-- flight mode 控制律，除非输出字段语义变化。
+- mission stage controller 控制律，除非输出字段语义变化。
 
 要求：
 
@@ -132,13 +133,13 @@
 - UI 命令必须通过已有 manager/client 分发。
 - UI 不直接访问底层 pymavlink。
 
-## 新增 flight mode 流程
+## 新增 mission stage 流程
 
-1. 在 `flight_modes/<new_mode>/` 新建 `config.py` 和 `mode.py`。
-2. 实现 `FlightMode` 接口。
-3. 在 `app/mode_registry.py` 注册。
-4. 在 `app/mission_manager.py` 增加进入/退出条件。
-5. 在 `config/flight_modes.yaml`、`config/mission.yaml` 和必要的 app 配置中加配置。
+1. 在 `missions/<mission_name>/stages/<new_stage>/` 新建 `config.py` 和 `mode.py`。
+2. 实现 `MissionStage` 接口。
+3. 在 `app/stage_registry.py` 注册。
+4. 在对应 mission 中增加进入/退出条件。
+5. 在 `missions/<mission_name>/config.yaml`、`missions/<mission_name>/config.yaml` 和必要的 app 配置中加配置。
 6. 增加 `tests/test_<new_mode>.py`。
 7. 更新 [docs/interfaces.md](interfaces.md) 和 [docs/architecture.md](architecture.md)。
 
@@ -167,7 +168,7 @@ python -m telemetry_link.main --help
 
 ## 禁止清单
 
-- 禁止 flight mode 直接调用 `LinkManager`。
+- 禁止 mission stage controller 直接调用 `LinkManager`。
 - 禁止绕过 `CommandShaper`。
 - 禁止默认打开真实控制发送。
 - 禁止把 `.pt`、日志、`__pycache__` 作为功能变更提交。

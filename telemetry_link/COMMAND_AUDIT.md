@@ -197,3 +197,39 @@ message_interval <MESSAGE_NAME> <rate_hz|default>
 ```
 
 使用 `MAV_CMD_SET_MESSAGE_INTERVAL`。`default` 会发送 `rate_hz=-1`。
+
+### `set_servo`
+
+格式：
+
+```text
+set_servo <channel> <pwm>
+```
+
+使用 `MAV_CMD_DO_SET_SERVO`：
+
+- param1 servo channel
+- param2 pwm
+
+### `set_relay`
+
+格式：
+
+```text
+set_relay <relay_id> <on|off>
+```
+
+使用 `MAV_CMD_DO_SET_RELAY`：
+
+- param1 relay number
+- param2 `0` / `1`
+
+### `release_payload`
+
+格式：
+
+```text
+release_payload <payload_id>
+```
+
+本阶段先安全拒绝未配置载荷映射，不把比赛专用映射写进底层。后续需要通过配置声明 `payload_id -> servo/relay action` 后再启用。

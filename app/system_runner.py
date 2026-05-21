@@ -5,20 +5,26 @@ import math
 import threading
 import time
 from collections import deque
+from pathlib import Path
 
-from app.app_config import AppConfig, load_flight_modes_runtime_config
+import yaml
+
+from app.app_config import AppConfig, load_mission_stage_runtime_config
 from app.blackbox_recorder import BlackboxRecorder
 from app.debug_runtime import DebugRuntime
 from app.health_monitor import HealthMonitor, HealthMonitorConfig
-from app.mission_manager import MissionManager, MissionManagerConfig, MissionMode
-from app.mode_registry import ModeRegistry, copy_dataclass_values
+from app.mission_manager import MissionMode
+from app.mission_runner import MissionRunner
+from app.stage_registry import StageRegistry, copy_dataclass_values
 from app.service_manager import ServiceManager
-from flight_modes.common import (
+from missions.common.control import (
     CommandShaper,
     FlightCommand,
     FlightCommandExecutor,
-    FlightModeInputAdapter,
+    StageInputAdapter,
 )
+from missions.base import MissionContext
+from missions.registry import available_mission_names, build_mission, build_mission_from_settings
 from uav_ui.control_switches import ControlRuntimeSwitches
 from uav_ui.terminal_ui import run_terminal_ui
 from uav_ui.ui_commands import CommandResult, build_ui_command_handler, format_controller_snapshot
@@ -31,7 +37,7 @@ class SystemRunner:
         self.stop_event = stop_event or threading.Event()
         self.logger = logging.getLogger(self.__class__.__name__)
         self.services = ServiceManager(config, self.stop_event)
-        self.input_adapter = FlightModeInputAdapter(config=config.input_adapter)
+        self.input_adapter = StageInputAdapter(config=config.input_adapter)
         self.health_monitor = HealthMonitor(
             HealthMonitorConfig(
                 max_vision_age_s=config.control.mode.max_vision_age_s,
@@ -39,21 +45,12 @@ class SystemRunner:
                 max_gimbal_age_s=config.control.mode.max_gimbal_age_s,
             )
         )
-        self.mission_manager = MissionManager(
-            MissionManagerConfig(
-                initial_mode=config.mission.initial_mode,
-                overhead_entry_target_size_thresh=(
-                    config.mission.overhead_entry_target_size_thresh
-                ),
-                overhead_entry_pitch_rad=config.mission.overhead_entry_pitch_rad,
-                overhead_entry_pitch_tol_rad=config.mission.overhead_entry_pitch_tol_rad,
-                overhead_entry_yaw_tol_rad=config.mission.overhead_entry_yaw_tol_rad,
-                overhead_entry_hold_s=config.mission.overhead_entry_hold_s,
-                overhead_exit_target_size_drop=config.mission.overhead_exit_target_size_drop,
-                auto_switch_enabled=config.mission.auto_switch_enabled,
-            )
+        self.mission_runner = MissionRunner(
+            build_mission(config.mission_name, config),
+            link_manager=self.services.link_manager,
+            yolo_client=YoloCommandClient(config.yolo_command),
         )
-        self.mode_registry = ModeRegistry(
+        self.stage_registry = StageRegistry(
             approach_config=config.approach_track,
             overhead_config=config.overhead_hold,
         )
@@ -70,13 +67,17 @@ class SystemRunner:
         self.control_command_log: deque[str] = deque(maxlen=120)
         self.control_command_log_lock = threading.Lock()
         self.runtime_config_lock = threading.RLock()
-        self.latest_task_mode = "UNKNOWN"
+        self.latest_mission_name = config.mission_name
+        self.latest_mission_stage = "UNKNOWN"
+        self.latest_stage_controller = "UNKNOWN"
+        self.latest_hold_reason = ""
         self.last_send_commands: bool | None = None
         self.target_lost_since: float | None = None
         self.lost_target_recenter_sent = False
 
     def run(self) -> None:
         self.services.start()
+        self.mission_runner.link_manager = self.services.link_manager
         self.blackbox.start()
         self.executor.set_telemetry_link(self.services.link_manager)
         try:
@@ -102,8 +103,9 @@ class SystemRunner:
             self.services.link_manager,
             controller_switches=self.controller_switches,
             yolo_client=YoloCommandClient(self.config.yolo_command),
-            task_mode_handler=self._set_task_mode_override,
-            flight_config_reload_handler=self._reload_flight_mode_config,
+            mission_command_handler=self._handle_mission_command,
+            stage_override_handler=self._set_stage_override,
+            stage_config_reload_handler=self._reload_mission_stage_config,
         )
         control_thread = threading.Thread(
             name="AppControlLoop",
@@ -115,7 +117,7 @@ class SystemRunner:
             run_terminal_ui(
                 self.services.link_manager,
                 self.stop_event,
-                self._get_control_command_lines,
+                self._get_mission_control_lines,
                 ui_command_handler,
             )
         finally:
@@ -137,14 +139,28 @@ class SystemRunner:
                     break
 
                 perception = self.services.get_perception(now)
+                scene = self.services.get_scene_detections(now)
                 drone = self.services.get_drone_state()
                 gimbal = self.services.get_gimbal_state()
                 link = self.services.get_link_status()
                 fused = self.services.fusion_manager.update(perception, drone, gimbal)
+                controller_enabled = self.controller_switches.snapshot()
                 with self.runtime_config_lock:
                     inputs = self.input_adapter.adapt(fused)
                     health = self.health_monitor.update(inputs)
-                    mission = self.mission_manager.update(inputs, health)
+                    context = MissionContext(
+                        timestamp=now,
+                        inputs=inputs,
+                        health=health,
+                        perception=perception,
+                        drone=drone,
+                        gimbal=gimbal,
+                        link=link,
+                        scene=scene,
+                        actions_enabled=bool(controller_enabled.send_commands),
+                    )
+                    self.mission_runner.send_actions = bool(controller_enabled.send_commands)
+                    mission = self.mission_runner.update(context)
                     mission = self.debug_runtime.apply_mission_override(mission)
                     raw_command, mode_status = self._update_active_mode(mission.active_mode, inputs)
                     raw_command = self.debug_runtime.apply_command_override(raw_command)
@@ -164,7 +180,6 @@ class SystemRunner:
                     )
                     shaped = self.command_shaper.update(raw_command, inputs.dt)
 
-                controller_enabled = self.controller_switches.snapshot()
                 self.executor.config.send_commands = bool(controller_enabled.send_commands)
                 if controller_enabled.send_commands:
                     self.executor.execute(shaped)
@@ -199,7 +214,10 @@ class SystemRunner:
                 )
 
                 with self.control_command_log_lock:
-                    self.latest_task_mode = mission.active_mode
+                    self.latest_mission_name = self.mission_runner.mission.name
+                    self.latest_mission_stage = mission.stage or "UNKNOWN"
+                    self.latest_stage_controller = mission.active_mode
+                    self.latest_hold_reason = mode_status.hold_reason or mission.hold_reason
 
                 if (now - last_print_time) >= print_sleep_sec:
                     self.logger.info(
@@ -243,9 +261,9 @@ class SystemRunner:
         if mode_name == MissionMode.IDLE.value:
             return FlightCommand(valid=True), _Status("IDLE", False, True, "idle")
         try:
-            mode = self.mode_registry.get(mode_name)
+            mode = self.stage_registry.get(mode_name)
         except KeyError:
-            self.logger.warning("unknown mission mode %s; commanding zero", mode_name)
+            self.logger.warning("unknown mission stage controller %s; commanding zero", mode_name)
             return FlightCommand(valid=True), _Status(mode_name, False, False, "unknown_mode")
         return mode.update(inputs)
 
@@ -282,53 +300,164 @@ class SystemRunner:
         with self.control_command_log_lock:
             self.control_command_log.appendleft(line)
 
-    def _get_control_command_lines(self) -> list[str]:
+    def _get_mission_control_lines(self) -> list[str]:
         with self.control_command_log_lock:
             return [
                 f"Controllers {format_controller_snapshot(self.controller_switches.snapshot())}",
-                f"Task mode {self.latest_task_mode}",
+                f"Mission {self.latest_mission_name} stage={self.latest_mission_stage}",
+                f"Stage controller {self.latest_stage_controller}",
+                f"Hold {self.latest_hold_reason or 'none'}",
+                *self.mission_runner.get_action_log_lines(),
                 *list(self.control_command_log),
             ]
 
-    def _set_task_mode_override(self, mode_name: str | None) -> CommandResult:
+    def _set_stage_override(self, mode_name: str | None) -> CommandResult:
         with self.runtime_config_lock:
             if mode_name is None:
                 self.debug_runtime.config.force_mode = None
-                self.mode_registry.reset_all()
-                return CommandResult(True, "task mode auto")
+                self.stage_registry.reset_all()
+                return CommandResult(True, "stage override auto")
             normalized = mode_name.strip().upper()
             if normalized == MissionMode.IDLE.value:
                 self.debug_runtime.config.force_mode = normalized
-                return CommandResult(True, "task mode forced IDLE")
+                return CommandResult(True, "stage override forced IDLE")
             try:
-                self.mode_registry.get(normalized)
+                self.stage_registry.get(normalized)
             except KeyError:
                 return CommandResult(
                     False,
-                    "task mode must be APPROACH_TRACK, OVERHEAD_HOLD, CORRIDOR_FOLLOW, IDLE, or auto",
+                    "stage override must be APPROACH_TRACK, OVERHEAD_HOLD, CORRIDOR_FOLLOW, IDLE, or auto",
                 )
             self.debug_runtime.config.force_mode = normalized
-            return CommandResult(True, f"task mode forced {normalized}")
+            return CommandResult(True, f"stage override forced {normalized}")
 
-    def _reload_flight_mode_config(self) -> CommandResult:
-        path = self.config.flight_modes_config_path
-        if not path:
-            return CommandResult(False, "flight mode config reload is unavailable for legacy config")
+    def _handle_mission_command(self, parts: list[str]) -> CommandResult:
+        if not parts:
+            return CommandResult(
+                False,
+                "format: mission list | mission switch <name> | mission start | mission reset | mission current",
+            )
+        action = parts[0].lower()
+        if action in {"list", "ls"}:
+            names = ", ".join(available_mission_names())
+            return CommandResult(
+                True,
+                f"missions: {names}; active={self.mission_runner.mission.name}",
+            )
+        if action in {"current", "status"}:
+            return CommandResult(True, f"active mission={self.mission_runner.mission.name}")
+        if action == "start":
+            starter = getattr(self.mission_runner.mission, "start", None)
+            if not callable(starter):
+                return CommandResult(
+                    False,
+                    f"mission start unsupported: {self.mission_runner.mission.name}",
+                )
+            with self.runtime_config_lock:
+                starter()
+                return CommandResult(True, f"mission start requested: {self.mission_runner.mission.name}")
+        if action == "reset":
+            with self.runtime_config_lock:
+                self._reset_mission_runtime(clear_for_safety=True)
+                return CommandResult(True, f"mission reset: {self.mission_runner.mission.name}; SEND=OFF")
+        if action in {"switch", "select", "use"}:
+            if len(parts) != 2:
+                return CommandResult(False, "format: mission switch <name>")
+            return self._switch_mission(parts[1])
+        return CommandResult(
+            False,
+            "format: mission list | mission switch <name> | mission start | mission reset | mission current",
+        )
+
+    def _switch_mission(self, mission_name: str) -> CommandResult:
+        normalized = mission_name.strip().lower()
+        if normalized not in available_mission_names():
+            return CommandResult(
+                False,
+                f"unknown mission: {mission_name}; available={', '.join(available_mission_names())}",
+            )
         try:
-            input_adapter_cfg, approach_cfg, overhead_cfg, shaper_cfg = load_flight_modes_runtime_config(
-                path,
+            settings = self._load_mission_settings(normalized)
+            mission = build_mission_from_settings(
+                normalized,
+                settings,
+                visual_config=self.config.mission,
+            )
+        except Exception as exc:
+            self.logger.exception("failed to switch mission")
+            return CommandResult(False, f"mission switch failed: {exc}")
+
+        with self.runtime_config_lock:
+            previous = self.mission_runner.mission.name
+            self.mission_runner.mission = mission
+            self.config.mission_name = normalized
+            self.config.mission_settings = dict(settings)
+            config_path = self._mission_config_path(normalized)
+            self.config.mission_config_path = str(config_path)
+            self.debug_runtime.config.force_mode = None
+            self._reset_mission_runtime(clear_for_safety=True)
+            return CommandResult(
+                True,
+                f"mission switched {previous} -> {mission.name}; stage auto; SEND=OFF",
+            )
+
+    def _reset_mission_runtime(self, *, clear_for_safety: bool) -> None:
+        self.mission_runner.reset()
+        self.stage_registry.reset_all()
+        self.command_shaper.reset()
+        self.target_lost_since = None
+        self.lost_target_recenter_sent = False
+        with self.control_command_log_lock:
+            self.latest_mission_name = self.mission_runner.mission.name
+            self.latest_mission_stage = "UNKNOWN"
+            self.latest_stage_controller = "UNKNOWN"
+            self.latest_hold_reason = ""
+            self.control_command_log.clear()
+        if clear_for_safety:
+            self.controller_switches.set_send_commands(False)
+            if self.services.link_manager is not None:
+                clear_sender = getattr(self.services.link_manager, "clear_continuous_commands", None)
+                if callable(clear_sender):
+                    clear_sender()
+
+    def _load_mission_settings(self, mission_name: str) -> dict[str, object]:
+        config_path = self._mission_config_path(mission_name)
+        if not config_path.exists():
+            if mission_name == self.config.mission_name:
+                return dict(self.config.mission_settings)
+            return {"name": mission_name}
+        with config_path.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+        if not isinstance(data, dict):
+            raise ValueError(f"mission config must be a mapping: {config_path}")
+        return dict(data)
+
+    def _mission_config_path(self, mission_name: str) -> Path:
+        return (
+            Path(__file__).resolve().parent.parent
+            / "missions"
+            / mission_name
+            / "config.yaml"
+        )
+
+    def _reload_mission_stage_config(self) -> CommandResult:
+        path = self.config.mission_config_path
+        if not path:
+            return CommandResult(False, "mission config reload is unavailable for legacy config")
+        try:
+            input_adapter_cfg, approach_cfg, overhead_cfg, shaper_cfg = load_mission_stage_runtime_config(
                 self.config.mission_config_path,
             )
         except Exception as exc:
-            self.logger.exception("failed to reload flight mode config")
-            return CommandResult(False, f"flight mode config reload failed: {exc}")
+            self.logger.exception("failed to reload mission config")
+            return CommandResult(False, f"mission config reload failed: {exc}")
 
         with self.runtime_config_lock:
             copy_dataclass_values(self.config.input_adapter, input_adapter_cfg)
             copy_dataclass_values(self.config.approach_track, approach_cfg)
             copy_dataclass_values(self.config.overhead_hold, overhead_cfg)
             copy_dataclass_values(self.config.shaper, shaper_cfg)
-            self.mode_registry.apply_configs(
+            self.stage_registry.apply_configs(
                 approach_config=approach_cfg,
                 overhead_config=overhead_cfg,
                 reset=True,
@@ -337,8 +466,8 @@ class SystemRunner:
             self.command_shaper.config = self.config.shaper
             self.command_shaper.reset()
 
-        self.logger.info("reloaded flight mode config from %s", path)
-        return CommandResult(True, f"flight mode config reloaded: {path}")
+        self.logger.info("reloaded mission config from %s", path)
+        return CommandResult(True, f"mission config reloaded: {path}")
 
     def _maybe_recenter_gimbal_after_target_loss(
         self,

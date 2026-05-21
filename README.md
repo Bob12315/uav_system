@@ -1,6 +1,6 @@
 # UAV Vision Tracking Control System
 
-这是一个面向无人机视觉跟踪任务的 Python 工程。系统由 YOLO 感知进程、MAVLink 遥测链路、融合层、飞行模式控制层和总控编排层组成，当前主要支持：
+这是一个面向无人机视觉跟踪任务的 Python 工程。系统由 YOLO 感知进程、MAVLink 遥测链路、融合层、mission/stage 控制层和总控编排层组成，当前主要支持：
 
 - YOLO + ByteTrack 目标检测与主目标选择。
 - MAVLink2 遥测接入、状态缓存、动作命令和连续控制命令发送。
@@ -20,15 +20,15 @@ YOLO + ByteTrack             MAVLink2 + state cache + command sender
 fusion/ ------------------------------------------------+
 PerceptionTarget + DroneState + GimbalState -> FusedState |
                                                            v
-flight_modes/common/input_adapter.py -> FlightModeInput
+missions/common/control/input_adapter.py -> MissionStageInput
                                                            v
-app/mission_manager.py -> active mode
+missions/<mission>/mission.py -> active stage
                                                            v
-flight_modes/<mode>/ -> raw FlightCommand
+missions/<mission>/stages/<stage>/ -> raw FlightCommand
                                                            v
-flight_modes/common/command_shaper.py -> shaped FlightCommand
+missions/common/control/command_shaper.py -> shaped FlightCommand
                                                            v
-flight_modes/common/executor.py -> telemetry_link.LinkManager
+missions/common/control/executor.py -> telemetry_link.LinkManager
                                                            v
 MAVLink control / gimbal commands
 ```
@@ -39,7 +39,7 @@ MAVLink control / gimbal commands
 
 ```text
 app/              系统入口、服务编排、任务状态机、健康检查
-flight_modes/     飞行模式和通用控制命令出口
+missions/         mission、stage controller 和通用控制命令出口
 fusion/           感知与遥测融合
 telemetry_link/   MAVLink2 通讯、状态缓存、命令队列和发送
 yolo_app/         YOLO + ByteTrack 感知进程
@@ -107,7 +107,7 @@ python -m app.main --connect-telemetry --send-commands false
 python -m app.main --connect-telemetry --ui --send-commands false
 ```
 
-UI 中可以在 app 运行时重载飞行模式控制参数。修改 `config/flight_modes.yaml` 后输入：
+UI 中可以在 app 运行时重载 mission stage 控制参数。修改 `missions/<mission_name>/config.yaml` 后输入：
 
 ```text
 pid reload
@@ -132,15 +132,15 @@ cd ~/uav_project/src
 python -m pytest -q
 ```
 
-当前测试覆盖 input adapter、command shaper、approach mode、overhead mode、mission manager。
+当前测试覆盖 input adapter、command shaper、mission stages、mission manager。
 
 ## 安全默认值
 
 - `config/app.yaml` 中 `executor.send_commands` 默认应保持 `false`。
 - 不传 `--connect-telemetry` 时，新 app 不连接 MAVLink。
 - 不传 `--send-commands true` 时，不应向飞控发送连续控制命令。
-- 所有 flight mode 输出必须经过 `CommandShaper` 和 `FlightCommandExecutor`。
-- flight mode 禁止直接调用 MAVLink 或 `LinkManager`。
+- 所有 stage controller 输出必须经过 `CommandShaper` 和 `FlightCommandExecutor`。
+- stage controller 禁止直接调用 MAVLink 或 `LinkManager`。
 
 实机前请阅读 [docs/safety.md](docs/safety.md)。
 

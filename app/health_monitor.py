@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from flight_modes.common.types import FlightModeInput
+from missions.common.control.types import MissionStageInput
 
 
 @dataclass(slots=True)
@@ -28,7 +28,7 @@ class HealthMonitor:
     def __init__(self, config: HealthMonitorConfig | None = None) -> None:
         self.config = config or HealthMonitorConfig()
 
-    def update(self, inputs: FlightModeInput) -> HealthStatus:
+    def update(self, inputs: MissionStageInput) -> HealthStatus:
         vision_fresh = inputs.vision_valid and self._age_fresh(
             inputs.vision_age_s,
             self.config.max_vision_age_s,
@@ -64,7 +64,7 @@ class HealthMonitor:
 
     def _hold_reason(
         self,
-        inputs: FlightModeInput,
+        inputs: MissionStageInput,
         vision_fresh: bool,
         drone_fresh: bool,
         gimbal_fresh: bool,

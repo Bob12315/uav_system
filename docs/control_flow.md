@@ -69,7 +69,7 @@ get_link_status()
 
 ## 5. input adapter
 
-`FlightModeInputAdapter.adapt(fused)` 输出 `FlightModeInput`。
+`StageInputAdapter.adapt(fused)` 输出 `MissionStageInput`。
 
 它负责：
 
@@ -92,9 +92,13 @@ get_link_status()
 - control 是否 ready。
 - hold reason。
 
-## 7. mission manager
+## 7. mission
 
-`MissionManager.update(inputs, health)` 输出 active mode。
+`SystemRunner` 构造 `MissionContext`，再调用 `MissionRunner.update(context)`。当前 mission 输出 `MissionOutput`：
+
+- `active_mode`：当前 mission 内 stage controller 的名字。
+- `actions`：一次性或重复任务动作请求，例如 `takeoff`、`local_position`、`release_payload`。
+- `stage` / `hold_reason` / `detail`：任务阶段和诊断信息。
 
 典型流转：
 
@@ -105,11 +109,13 @@ IDLE
   -> APPROACH_TRACK
 ```
 
-mission manager 只决定 active mode，不计算速度。
+`visual_tracking` mission 保留上述视觉跟踪流转。`rescue_competition` mission 是比赛任务骨架，按阶段请求起飞、航点、投放和降落动作。
 
-## 8. flight mode
+mission 只决定流程、active stage 和通用 action，不直接发送 MAVLink。
 
-`ModeRegistry.get(active_mode)` 取得具体 mode，然后：
+## 8. mission stage controller
+
+`StageRegistry.get(active_mode)` 取得当前 mission 对应阶段控制器，然后：
 
 ```python
 raw_command, mode_status = mode.update(inputs)
@@ -178,6 +184,7 @@ LinkManager.send_gimbal_angle(...)
 
 - `ControlCommand` -> `SET_POSITION_TARGET_LOCAL_NED`
 - `ActionCommand(GIMBAL_ANGLE)` -> `MAV_CMD_DO_MOUNT_CONTROL`
+- `ActionCommand(SET_SERVO/SET_RELAY/RELEASE_PAYLOAD)` -> 通用动作封装
 - `GimbalRateCommand` -> `MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW`
 - `ActionCommand` -> `COMMAND_LONG` 或 `COMMAND_INT`
 

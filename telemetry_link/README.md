@@ -21,7 +21,7 @@
 - 不做感知融合。
 - 不计算目标跟踪控制律。
 - 不决定 `APPROACH_TRACK`、`OVERHEAD_HOLD` 等任务阶段。
-- 不直接依赖 `flight_modes/` 或 `app/`。
+- 不直接依赖 mission stage controller 或 `app/`。
 - 不是 ROS2 节点，不使用 `rclpy`，不发布或订阅 ROS2 topic。
 
 ## 数据流
@@ -217,9 +217,9 @@ switch_source sitl
 
 ## 禁止事项
 
-- 不在 `telemetry_link/` 中实现 YOLO、fusion 或 flight mode 控制公式。
+- 不在 `telemetry_link/` 中实现 YOLO、fusion 或 mission stage 控制公式。
 - 不让外部模块直接访问 `pymavlink` master 对象。
-- 不让 flight mode 直接调用 `LinkManager`。
+- 不让 stage controller 直接调用 `LinkManager`。
 - 不绕过 `CommandShaper` 和 `FlightCommandExecutor` 发送自动控制命令。
 - 不默认打开真实控制发送；`send_commands` 的安全开关属于 app executor 层。
 - 不把 `__pycache__`、日志或本地调试产物作为功能变更提交。

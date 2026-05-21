@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from app.health_monitor import HealthStatus
-from flight_modes.common.types import FlightModeInput
+from missions.common.control.types import MissionStageInput
 
 
 class MissionMode(str, Enum):
@@ -38,6 +38,8 @@ class MissionState:
 
 @dataclass(slots=True)
 class MissionManager:
+    # TODO: Keep this compatibility state machine until callers migrate fully to
+    # missions.visual_tracking.VisualTrackingMission.
     config: MissionManagerConfig = field(default_factory=MissionManagerConfig)
     _active_mode: str = field(init=False)
     _overhead_entry_since: float | None = field(init=False, default=None)
@@ -51,7 +53,7 @@ class MissionManager:
         self._overhead_entry_since = None
         self._overhead_entry_size = None
 
-    def update(self, inputs: FlightModeInput, health: HealthStatus) -> MissionState:
+    def update(self, inputs: MissionStageInput, health: HealthStatus) -> MissionState:
         previous = self._active_mode
         hold_reason = ""
         if not health.fusion_ready:
@@ -100,7 +102,7 @@ class MissionManager:
             hold_reason="forced",
         )
 
-    def _entry_conditions_met(self, inputs: FlightModeInput, health: HealthStatus) -> bool:
+    def _entry_conditions_met(self, inputs: MissionStageInput, health: HealthStatus) -> bool:
         if not health.control_ready:
             return False
         if not inputs.target_stable or not inputs.target_locked:
@@ -120,7 +122,7 @@ class MissionManager:
             return False
         return True
 
-    def _should_exit_overhead(self, inputs: FlightModeInput, health: HealthStatus) -> bool:
+    def _should_exit_overhead(self, inputs: MissionStageInput, health: HealthStatus) -> bool:
         if not health.fusion_ready:
             return True
         if not inputs.target_valid or not inputs.target_locked:
@@ -137,13 +139,13 @@ class MissionManager:
                 return True
         return False
 
-    def _pitch_near_downward(self, inputs: FlightModeInput) -> bool:
+    def _pitch_near_downward(self, inputs: MissionStageInput) -> bool:
         pitch = float(inputs.gimbal_pitch)
         if not math.isfinite(pitch):
             return False
         return abs(pitch - self.config.overhead_entry_pitch_rad) <= self.config.overhead_entry_pitch_tol_rad
 
-    def _yaw_aligned_for_overhead(self, inputs: FlightModeInput) -> bool:
+    def _yaw_aligned_for_overhead(self, inputs: MissionStageInput) -> bool:
         yaw = float(inputs.gimbal_yaw)
         if not math.isfinite(yaw):
             return False

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from flight_modes.common.types import FlightModeInput
-from flight_modes.overhead_hold import (
+from missions.common.control.types import MissionStageInput
+from missions.visual_tracking.stages.overhead_hold import (
     OverheadBodyConfig,
     OverheadHoldConfig,
     OverheadHoldMode,
 )
 
 
-def _inputs(**overrides) -> FlightModeInput:
+def _inputs(**overrides) -> MissionStageInput:
     data = dict(
         timestamp=1.0,
         dt=0.02,
@@ -32,7 +32,7 @@ def _inputs(**overrides) -> FlightModeInput:
         gimbal_age_s=0.01,
     )
     data.update(overrides)
-    return FlightModeInput(**data)
+    return MissionStageInput(**data)
 
 
 def test_overhead_hold_maps_overhead_errors_to_raw_command() -> None:

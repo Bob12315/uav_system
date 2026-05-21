@@ -138,17 +138,17 @@ except ModuleNotFoundError:
 
     def load_control_config(_argv: list[str]) -> ControlConfig:
         raise RuntimeError("legacy control config is unavailable because control/ is not installed")
-from flight_modes.approach_track.config import (
+from missions.visual_tracking.stages.approach_track.config import (
     ApproachBodyConfig,
     ApproachForwardConfig,
     ApproachGimbalConfig,
     ApproachTrackConfig,
 )
-from flight_modes.common.command_shaper import CommandShaperConfig
-from flight_modes.common.debug_config import FlightModeDebugConfig
-from flight_modes.common.executor import FlightCommandExecutorConfig
-from flight_modes.common.input_adapter import InputAdapterConfig
-from flight_modes.overhead_hold.config import (
+from missions.common.control.command_shaper import CommandShaperConfig
+from missions.common.control.debug_config import StageDebugConfig
+from missions.common.control.executor import FlightCommandExecutorConfig
+from missions.common.control.input_adapter import InputAdapterConfig
+from missions.visual_tracking.stages.overhead_hold.config import (
     OverheadApproachConfig,
     OverheadBodyConfig,
     OverheadGimbalConfig,
@@ -201,14 +201,15 @@ class AppConfig:
     control: ControlConfig
     telemetry: TelemetryConfig
     yolo_command: YoloCommandConfig
+    mission_name: str
+    mission_settings: dict[str, Any]
     input_adapter: InputAdapterConfig
     mission: MissionManagerConfig
     approach_track: ApproachTrackConfig
     overhead_hold: OverheadHoldConfig
     shaper: CommandShaperConfig
     executor: FlightCommandExecutorConfig
-    debug: FlightModeDebugConfig
-    flight_modes_config_path: str | None
+    debug: StageDebugConfig
     mission_config_path: str | None
     start_gimbal: bool
     start_body: bool
@@ -219,10 +220,10 @@ class AppConfig:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Refactored UAV control app runtime")
     parser.add_argument("--app-config", default=str(ROOT_DIR / "config" / "app.yaml"))
-    parser.add_argument("--mission-config", default=str(ROOT_DIR / "config" / "mission.yaml"))
     parser.add_argument(
-        "--flight-modes-config",
-        default=str(ROOT_DIR / "config" / "flight_modes.yaml"),
+        "--mission-config",
+        default=None,
+        help="Path to mission config yaml; defaults to missions/<mission_name>/config.yaml.",
     )
     parser.add_argument(
         "--control-config",
@@ -248,6 +249,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--log-level")
     parser.add_argument("--send-commands", type=_to_bool)
     parser.add_argument("--force-mode")
+    parser.add_argument(
+        "--mission-name",
+        default=None,
+        help="Mission plugin name to run; defaults to visual_tracking.",
+    )
     parser.add_argument(
         "--start-auto-control",
         action="store_true",
@@ -279,31 +285,51 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
     if args.control_config and not Path(args.app_config).exists():
         return _load_legacy_app_config(args)
 
+    app_config_path = Path(args.app_config)
     app_data = _load_yaml(args.app_config)
-    mission_file_data = _load_yaml_if_exists(args.mission_config)
-    flight_data = _load_yaml(args.flight_modes_config)
+    app_mission_data = _section(app_data, "mission")
+    mission_name_hint = _resolve_mission_name(args, app_mission_data, app_mission_data)
+    mission_config_path = _resolve_mission_config_path(
+        args,
+        app_mission_data,
+        app_config_path,
+        mission_name_hint,
+    )
+    mission_file_data = _load_yaml_if_exists(mission_config_path)
+    mission_data = _normalize_mission_config(
+        mission_file_data if mission_file_data else app_mission_data
+    )
+    mission_name = _resolve_mission_name(args, app_mission_data, mission_data)
+    if not mission_file_data and mission_config_path:
+        mission_config_path = _resolve_mission_config_path(
+            args,
+            app_mission_data,
+            app_config_path,
+            mission_name,
+        )
+        mission_file_data = _load_yaml_if_exists(mission_config_path)
+        mission_data = _normalize_mission_config(
+            mission_file_data if mission_file_data else app_mission_data
+        )
     telemetry_cfg = load_telemetry_config(args.telemetry_config)
     yolo_command_cfg = load_yolo_command_config(args.yolo_config)
 
     runtime_data = _section(app_data, "runtime")
     services_data = _section(app_data, "services")
     blackbox_data = _section(app_data, "blackbox")
-    mission_data = _normalize_mission_config(
-        mission_file_data if mission_file_data else _section(app_data, "mission")
-    )
     recovery_data = _normalize_recovery_config(
         mission_file_data if mission_file_data else app_data,
         runtime_data,
     )
     executor_data = _section(app_data, "executor")
 
-    input_adapter_cfg = _build_input_adapter_config(_section(flight_data, "input_adapter"))
+    input_adapter_cfg = _build_input_adapter_config(_section(mission_data, "input_adapter"))
     mission_cfg = _build_mission_manager_config(mission_data)
-    approach_track_cfg = _build_approach_track_config(flight_data, mission_data)
-    overhead_hold_cfg = _build_overhead_hold_config(flight_data, mission_data)
-    shaper_cfg = _build_shaper_config(_section(flight_data, "shaper"))
+    approach_track_cfg = _build_approach_track_config(mission_data, mission_data)
+    overhead_hold_cfg = _build_overhead_hold_config(mission_data, mission_data)
+    shaper_cfg = _build_shaper_config(_section(mission_data, "shaper"))
     executor_cfg = _build_executor_config(executor_data)
-    debug_cfg = FlightModeDebugConfig()
+    debug_cfg = StageDebugConfig()
 
     send_commands = executor_cfg.send_commands
     if args.send_commands is not None:
@@ -391,7 +417,7 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
     control_cfg = _build_control_compat(
         runtime_compat_data,
         mission_data,
-        flight_data,
+        mission_data,
         executor_cfg,
     )
     executor_cfg.send_commands = bool(send_commands)
@@ -402,6 +428,8 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
         control=control_cfg,
         telemetry=telemetry_cfg,
         yolo_command=yolo_command_cfg,
+        mission_name=mission_name,
+        mission_settings=dict(mission_data),
         input_adapter=input_adapter_cfg,
         mission=mission_cfg,
         approach_track=approach_track_cfg,
@@ -409,8 +437,7 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
         shaper=shaper_cfg,
         executor=executor_cfg,
         debug=debug_cfg,
-        flight_modes_config_path=str(args.flight_modes_config),
-        mission_config_path=str(args.mission_config),
+        mission_config_path=mission_config_path,
         start_gimbal=bool(args.start_auto_control),
         start_body=bool(args.start_auto_control),
         start_approach=bool(args.start_auto_control),
@@ -418,20 +445,16 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
     )
 
 
-def load_flight_modes_runtime_config(
-    flight_modes_config_path: str,
-    mission_config_path: str | None = None,
+def load_mission_stage_runtime_config(
+    mission_config_path: str | None,
 ) -> tuple[InputAdapterConfig, ApproachTrackConfig, OverheadHoldConfig, CommandShaperConfig]:
-    flight_data = _load_yaml(flight_modes_config_path)
-    mission_file_data = _load_yaml_if_exists(mission_config_path) if mission_config_path else {}
-    mission_data = _normalize_mission_config(mission_file_data)
+    mission_data = _normalize_mission_config(_load_yaml_if_exists(mission_config_path))
     return (
-        _build_input_adapter_config(_section(flight_data, "input_adapter")),
-        _build_approach_track_config(flight_data, mission_data),
-        _build_overhead_hold_config(flight_data, mission_data),
-        _build_shaper_config(_section(flight_data, "shaper")),
+        _build_input_adapter_config(_section(mission_data, "input_adapter")),
+        _build_approach_track_config(mission_data, mission_data),
+        _build_overhead_hold_config(mission_data, mission_data),
+        _build_shaper_config(_section(mission_data, "shaper")),
     )
-
 
 def load_telemetry_config(path: str) -> TelemetryConfig:
     merged = _load_yaml(path)
@@ -808,6 +831,41 @@ def _build_mission_manager_config(data: dict[str, Any]) -> MissionManagerConfig:
     )
 
 
+def _resolve_mission_name(
+    args: argparse.Namespace,
+    app_mission_data: dict[str, Any],
+    mission_data: dict[str, Any],
+) -> str:
+    if args.mission_name:
+        return str(args.mission_name).strip() or "visual_tracking"
+    if "name" in mission_data:
+        return str(mission_data.get("name") or "visual_tracking").strip() or "visual_tracking"
+    if "name" in app_mission_data:
+        return str(app_mission_data.get("name") or "visual_tracking").strip() or "visual_tracking"
+    return "visual_tracking"
+
+
+def _resolve_mission_config_path(
+    args: argparse.Namespace,
+    app_mission_data: dict[str, Any],
+    app_config_path: Path,
+    mission_name: str,
+) -> str:
+    path_value = args.mission_config
+    if path_value is None:
+        path_value = app_mission_data.get("config_path")
+    if path_value is None:
+        path_value = ROOT_DIR / "missions" / mission_name / "config.yaml"
+    path = Path(str(path_value)).expanduser()
+    if path.is_absolute():
+        return str(path)
+
+    app_relative = app_config_path.resolve().parent / path
+    if app_relative.exists():
+        return str(app_relative)
+    return str(ROOT_DIR / path)
+
+
 def _build_control_compat(
     runtime: dict[str, Any],
     mission: dict[str, Any],
@@ -995,6 +1053,8 @@ def _load_legacy_app_config(args: argparse.Namespace) -> AppConfig:
         control=control_cfg,
         telemetry=telemetry_cfg,
         yolo_command=yolo_command_cfg,
+        mission_name="visual_tracking",
+        mission_settings={},
         input_adapter=InputAdapterConfig(**asdict(control_cfg.input_adapter)),
         mission=MissionManagerConfig(
             overhead_entry_target_size_thresh=control_cfg.mode.overhead_entry_target_size_thresh,
@@ -1021,8 +1081,7 @@ def _load_legacy_app_config(args: argparse.Namespace) -> AppConfig:
             dt_min=control_cfg.shaper.dt_min,
         ),
         executor=executor_cfg,
-        debug=FlightModeDebugConfig(force_mode=args.force_mode),
-        flight_modes_config_path=None,
+        debug=StageDebugConfig(force_mode=args.force_mode),
         mission_config_path=None,
         start_gimbal=bool(control_cfg.runtime.enable_gimbal_controller and args.start_auto_control),
         start_body=bool(control_cfg.runtime.enable_body_controller and args.start_auto_control),
@@ -1054,7 +1113,8 @@ def _normalize_mission_config(data: dict[str, Any]) -> dict[str, Any]:
     enter_overhead = _section(transitions, "approach_track_to_overhead_hold")
     exit_overhead = _section(transitions, "overhead_hold_to_approach_track")
 
-    normalized = {
+    normalized = dict(data)
+    normalized.update({
         "initial_mode": data.get("initial_mode", "APPROACH_TRACK"),
         "auto_switch_enabled": data.get("auto_switch_enabled", True),
         "max_vision_age_s": freshness.get("max_vision_age_s", 0.3),
@@ -1075,7 +1135,9 @@ def _normalize_mission_config(data: dict[str, Any]) -> dict[str, Any]:
         "overhead_entry_yaw_tol_rad": enter_overhead.get("gimbal_yaw_tol_rad", 0.15),
         "overhead_entry_hold_s": enter_overhead.get("hold_s", 0.5),
         "overhead_exit_target_size_drop": exit_overhead.get("target_size_drop", 0.06),
-    }
+    })
+    if "name" in data:
+        normalized["name"] = data["name"]
 
     for key in (
         "yaw_align_thresh_rad",

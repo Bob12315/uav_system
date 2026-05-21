@@ -317,6 +317,46 @@ def dispatch_text_command(manager: LinkManager, command: str, logger: logging.Lo
         )
         return CommandResult(True, f"gimbal_manager_configure queued gimbal_device_id={gimbal_device_id}")
 
+    if command.startswith("set_servo "):
+        parts = command.split()
+        if len(parts) != 3:
+            return CommandResult(False, "format: set_servo <channel> <pwm>")
+        try:
+            channel = int(parts[1])
+            pwm = int(parts[2])
+        except ValueError:
+            return CommandResult(False, f"parse failed: {command}")
+        manager.set_servo(channel, pwm)
+        _log_info("set_servo command queued channel=%s pwm=%s", channel, pwm)
+        return CommandResult(True, f"set_servo queued channel={channel} pwm={pwm}")
+
+    if command.startswith("set_relay "):
+        parts = command.split()
+        if len(parts) != 3:
+            return CommandResult(False, "format: set_relay <relay_id> <on|off>")
+        try:
+            relay_id = int(parts[1])
+        except ValueError:
+            return CommandResult(False, f"parse failed: {command}")
+        state_text = parts[2].strip().lower()
+        if state_text not in {"on", "off"}:
+            return CommandResult(False, "set_relay state must be on or off")
+        state = state_text == "on"
+        manager.set_relay(relay_id, state)
+        _log_info("set_relay command queued relay_id=%s state=%s", relay_id, state)
+        return CommandResult(True, f"set_relay queued relay_id={relay_id} state={state_text}")
+
+    if command.startswith("release_payload "):
+        parts = command.split()
+        if len(parts) != 2:
+            return CommandResult(False, "format: release_payload <payload_id>")
+        try:
+            payload_id = int(parts[1])
+        except ValueError:
+            return CommandResult(False, f"parse failed: {command}")
+        _log_warning("release_payload rejected payload_id=%s: payload mapping is not configured", payload_id)
+        return CommandResult(False, f"release_payload rejected payload_id={payload_id}: payload mapping is not configured")
+
     if command.startswith("set_message_interval ") or command.startswith("message_interval "):
         parts = command.split()
         if len(parts) != 3:

@@ -6,7 +6,7 @@
 
 - 速度单位：`m/s`。
 - 角速度单位：`rad/s`，进入 MAVLink gimbal manager 前由 `telemetry_link` 转成 `deg/s`。
-- 云台角度状态：当前 `telemetry_link.GimbalState` 使用 `deg`；`fusion.FusedState.gimbal_yaw/gimbal_pitch` 和 `flight_modes` 输入使用 `rad`，改单位前必须全链路同步。
+- 云台角度状态：当前 `telemetry_link.GimbalState` 使用 `deg`；`fusion.FusedState.gimbal_yaw/gimbal_pitch` 和 mission stage 输入使用 `rad`，改单位前必须全链路同步。
 - `vx_cmd`：机体系前向速度。
 - `vy_cmd`：机体系横向速度，正方向由配置 `vy_sign` 和 MAVLink frame 定义。
 - `vz_cmd`：机体系竖向速度，当前默认 0。
@@ -57,11 +57,11 @@
 
 创建者：`fusion.fusion_manager.FusionManager.update()`。
 
-消费者：`FlightModeInputAdapter`。
+消费者：`StageInputAdapter`。
 
-## flight_modes.common.types.FlightModeInput
+## missions.common.control.types.MissionStageInput
 
-用途：所有 flight mode 的统一输入。
+用途：所有 mission stage controller 的统一输入。
 
 字段：
 
@@ -92,13 +92,13 @@
 - `drone_age_s: float`
 - `gimbal_age_s: float`
 
-创建者：`FlightModeInputAdapter.adapt(fused: FusedState)`。
+创建者：`StageInputAdapter.adapt(fused: FusedState)`。
 
-消费者：`MissionManager`、`HealthMonitor`、所有 flight mode。
+消费者：`MissionManager`、`HealthMonitor`、所有 mission stage controller。
 
-## flight_modes.common.types.FlightCommand
+## missions.common.control.types.FlightCommand
 
-用途：flight mode 输出和 command shaper 输出的统一控制命令。
+用途：mission stage controller 输出和 command shaper 输出的统一控制命令。
 
 字段：
 
@@ -119,7 +119,7 @@
 
 创建者：
 
-- `flight_modes/<mode>/mode.py` 创建 raw command。
+- `missions/<mission_name>/stages/<stage_name>/mode.py` 创建 raw command。
 - `CommandShaper.update()` 创建 shaped command。
 
 消费者：
@@ -130,12 +130,12 @@
 
 规则：
 
-- flight mode 不允许直接发送 `FlightCommand`。
+- mission stage controller 不允许直接发送 `FlightCommand`。
 - raw command 必须经过 `CommandShaper`。
 - `valid=False` 时 executor 不应发送。
 - disabled 通道的值应由 mode 或 shaper 归零。
 
-## flight_modes.common.types.FlightModeStatus
+## missions.common.control.types.MissionStageStatus
 
 用途：说明 mode 当前状态，主要用于日志和 UI。
 
@@ -147,18 +147,18 @@
 - `hold_reason: str`：未放行或保持的原因。
 - `detail: dict[str, object]`：可选调试信息。
 
-## flight_modes.base_mode.FlightMode
+## missions.base_stage.MissionStage
 
 接口：
 
 ```python
-class FlightMode(Protocol):
+class MissionStage(Protocol):
     name: str
 
     def reset(self) -> None:
         ...
 
-    def update(self, inputs: FlightModeInput) -> tuple[FlightCommand, FlightModeStatus]:
+    def update(self, inputs: MissionStageInput) -> tuple[FlightCommand, MissionStageStatus]:
         ...
 ```
 
@@ -270,7 +270,7 @@ land() -> None
 
 - `app.ServiceManager` 持有 `LinkManager`。
 - `FlightCommandExecutor` 只通过公开方法提交命令。
-- flight mode 不直接持有 `LinkManager`。
+- mission stage controller 不直接持有 `LinkManager`。
 - `start()` 启动各 source 的后台连接/监控线程并返回，不应等待 heartbeat 成功。
 - `start_background()` 保留给嵌入 app 的异步启动路径。
 - `switch_active_source()` 只切换对外状态和后续命令提交目标；切换时非 active source 的连续控制队列必须清空。
@@ -300,24 +300,25 @@ get_gimbal_state() -> GimbalState
 - 不计算控制律。
 - 不决定 mission 阶段。
 
-## app.mission_manager.MissionManager
+## missions.Mission / app.mission_runner.MissionRunner
 
-用途：任务阶段状态机。
+用途：任务阶段状态机和任务动作分发。
 
 输入：
 
-- `FlightModeInput`
-- `HealthStatus`
+- `MissionContext`
 
 输出：
 
-- active mode，例如 `IDLE`、`APPROACH_TRACK`、`OVERHEAD_HOLD`。
-- hold reason。
+- `MissionOutput.active_mode`，例如 `IDLE`、`APPROACH_TRACK`、`OVERHEAD_HOLD`。
+- `MissionOutput.actions`，例如 `takeoff`、`land`、`local_position`、`release_payload`。
+- `stage`、`hold_reason` 和 `detail`。
 
 禁止：
 
 - 不计算速度。
-- 不发送命令。
+- mission 不直接发送命令。
+- action 由 `MissionRunner` 经 `LinkManager` 转发。
 
 ## app.health_monitor.HealthMonitor
 

@@ -27,6 +27,9 @@ blackbox:
   include_commands: true
   include_events: true
 
+mission:
+  name: visual_tracking
+
 executor:
   body_frame: 8
   gimbal_roll_deg: 0.0

@@ -49,3 +49,15 @@ def test_complete_pid_reload_command() -> None:
     result = complete_command_input("pid r", len("pid r"))
 
     assert result.buffer == "pid reload"
+
+
+def test_complete_stage_override_command() -> None:
+    result = complete_command_input("stage mode OVER", len("stage mode OVER"))
+
+    assert result.buffer == "stage mode OVERHEAD_HOLD"
+
+
+def test_complete_mission_switch_command() -> None:
+    result = complete_command_input("mission switch resc", len("mission switch resc"))
+
+    assert result.buffer == "mission switch rescue_competition"

@@ -141,6 +141,9 @@ class TelemetryReceiver(threading.Thread):
             raw_state = self.state_cache.get_latest_drone_state_raw()
             self.state_cache.update_drone_state(
                 velocity_valid=True,
+                local_x=float(message.x),
+                local_y=float(message.y),
+                local_z=float(message.z),
                 vx=float(message.vx),
                 vy=float(message.vy),
                 vz=float(message.vz),

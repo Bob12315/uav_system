@@ -5,7 +5,7 @@ import math
 import pytest
 
 from fusion.fusion_manager import FusionManager
-from fusion.models import FusionConfig, PerceptionTarget
+from fusion.models import FusionConfig, PerceptionTarget, SceneDetections, SceneObject
 from telemetry_link.models import DroneState, GimbalState
 
 
@@ -100,3 +100,28 @@ def test_unlocked_target_is_not_control_enabled() -> None:
     assert fused.control_allowed is True
     assert fused.control_enabled is False
     assert fused.fusion_valid is False
+
+
+def test_scene_detections_model_defaults_and_objects() -> None:
+    scene = SceneDetections(
+        timestamp=1.0,
+        frame_id=2,
+        image_width=640,
+        image_height=480,
+        detections=[
+            SceneObject(
+                track_id=7,
+                class_id=3,
+                class_name="cylinder",
+                confidence=0.8,
+                cx=320.0,
+                cy=240.0,
+            )
+        ],
+        valid=True,
+    )
+
+    assert scene.valid is True
+    assert scene.detections[0].track_id == 7
+    assert scene.detections[0].class_name == "cylinder"
+    assert scene.detections[0].confidence == 0.8

@@ -13,7 +13,7 @@ pip install pymavlink pyyaml pytest
 用途：
 
 - `app`
-- `flight_modes`
+- `missions`
 - `fusion`
 - `telemetry_link`
 - `uav_ui`

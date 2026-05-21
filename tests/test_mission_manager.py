@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.health_monitor import HealthStatus
 from app.mission_manager import MissionManager, MissionManagerConfig
-from flight_modes.common.types import FlightModeInput
+from missions.common.control.types import MissionStageInput
 
 
 def _health(ready: bool = True) -> HealthStatus:
@@ -17,7 +17,7 @@ def _health(ready: bool = True) -> HealthStatus:
     )
 
 
-def _inputs(**overrides) -> FlightModeInput:
+def _inputs(**overrides) -> MissionStageInput:
     data = dict(
         timestamp=1.0,
         fused_valid=True,
@@ -35,7 +35,7 @@ def _inputs(**overrides) -> FlightModeInput:
         gimbal_yaw=0.0,
     )
     data.update(overrides)
-    return FlightModeInput(**data)
+    return MissionStageInput(**data)
 
 
 def test_default_mode_is_approach_track_and_config_can_start_idle() -> None:

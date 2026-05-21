@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(slots=True)
@@ -27,6 +27,35 @@ class PerceptionTarget:
     ex: float = 0.0
     ey: float = 0.0
     lost_count: int = 0
+
+
+@dataclass(slots=True)
+class SceneObject:
+    track_id: int | None = None
+    class_id: int = -1
+    class_name: str = ""
+    confidence: float = 0.0
+    x1: float = 0.0
+    y1: float = 0.0
+    x2: float = 0.0
+    y2: float = 0.0
+    cx: float = 0.0
+    cy: float = 0.0
+    w: float = 0.0
+    h: float = 0.0
+    ex: float = 0.0
+    ey: float = 0.0
+    target_size: float = 0.0
+
+
+@dataclass(slots=True)
+class SceneDetections:
+    timestamp: float = 0.0
+    frame_id: int = 0
+    image_width: int = 0
+    image_height: int = 0
+    detections: list[SceneObject] = field(default_factory=list)
+    valid: bool = False
 
 
 @dataclass(slots=True)

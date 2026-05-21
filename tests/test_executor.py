@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from flight_modes.common.executor import FlightCommandExecutor
-from flight_modes.common.types import FlightCommand
+from missions.common.control.executor import FlightCommandExecutor
+from missions.common.control.types import FlightCommand
 
 
 class _FakeTelemetryLink:

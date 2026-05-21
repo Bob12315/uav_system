@@ -3,14 +3,19 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
+from pymavlink import mavutil
 
+from telemetry_link.command_dispatcher import dispatch_text_command
 from telemetry_link.command_queue import CommandQueue
+from telemetry_link.command_sender import CommandSender
 from telemetry_link.config import EndpointConfig, TelemetryConfig, load_config
 from telemetry_link.link_manager import LinkManager, SourceRuntime
-from telemetry_link.models import ControlCommand, ControlType, GimbalRateCommand
+from telemetry_link.models import ActionCommand, ActionType, ControlCommand, ControlType, GimbalRateCommand
 from telemetry_link.state_cache import StateCache
+from telemetry_link.telemetry_receiver import TelemetryReceiver
 
 
 def _endpoint(name: str) -> EndpointConfig:
@@ -182,3 +187,138 @@ log_level: INFO
 
     with pytest.raises(Exception, match="invalid bool value"):
         load_config()
+
+
+def test_local_position_ned_updates_raw_local_position_and_relative_altitude() -> None:
+    cache = StateCache(heartbeat_timeout_sec=1.0, rx_timeout_sec=1.0)
+    now = time.time()
+    cache.mark_connected(target_system=1, target_component=1, transport="tcp", now=now)
+    receiver = TelemetryReceiver(
+        client=None,
+        state_cache=cache,
+        cfg=_config(data_source="sitl", active_source="sitl", rx_timeout_sec=1.0),
+        stop_event=threading.Event(),
+    )
+    message = SimpleNamespace(x=1.25, y=-2.5, z=-3.75, vx=0.1, vy=0.2, vz=0.3)
+
+    receiver._handle_message("LOCAL_POSITION_NED", message, now)
+
+    state = cache.get_latest_drone_state_validated(time.time())
+    assert state.local_position_valid is True
+    assert state.local_x == pytest.approx(1.25)
+    assert state.local_y == pytest.approx(-2.5)
+    assert state.local_z == pytest.approx(-3.75)
+    assert state.relative_altitude == pytest.approx(3.75)
+
+
+def test_dispatch_set_servo_queues_action_command() -> None:
+    manager = LinkManager(_config(data_source="sitl", active_source="sitl"))
+
+    result = dispatch_text_command(manager, "set_servo 9 1900")
+
+    action = manager.runtimes["sitl"].command_queue.get_next_action()
+    assert result.ok is True
+    assert action is not None
+    assert action.action_type == ActionType.SET_SERVO
+    assert action.params == {"channel": 9, "pwm": 1900}
+
+
+def test_dispatch_set_relay_queues_action_command() -> None:
+    manager = LinkManager(_config(data_source="sitl", active_source="sitl"))
+
+    result = dispatch_text_command(manager, "set_relay 0 on")
+
+    action = manager.runtimes["sitl"].command_queue.get_next_action()
+    assert result.ok is True
+    assert action is not None
+    assert action.action_type == ActionType.SET_RELAY
+    assert action.params == {"relay_id": 0, "state": True}
+
+
+def test_dispatch_release_payload_rejects_unconfigured_mapping() -> None:
+    manager = LinkManager(_config(data_source="sitl", active_source="sitl"))
+
+    result = dispatch_text_command(manager, "release_payload 1")
+
+    assert result.ok is False
+    assert "not configured" in result.message
+    assert manager.runtimes["sitl"].command_queue.get_next_action() is None
+
+
+class _FakeMav:
+    def __init__(self) -> None:
+        self.command_long_calls = []
+
+    def command_long_send(self, *args) -> None:
+        self.command_long_calls.append(args)
+
+
+class _FakeMaster:
+    target_system = 1
+    target_component = 2
+
+    def __init__(self) -> None:
+        self.mav = _FakeMav()
+
+
+class _RawMessageClient:
+    def __init__(self) -> None:
+        self.master = _FakeMaster()
+
+    def send_raw_message(self, callback) -> None:
+        callback(self.master)
+
+
+def _sender_with_fake_client() -> tuple[CommandSender, _RawMessageClient]:
+    client = _RawMessageClient()
+    sender = CommandSender(
+        client=client,
+        command_queue=CommandQueue(),
+        state_cache=StateCache(heartbeat_timeout_sec=1.0, rx_timeout_sec=1.0),
+        cfg=_config(data_source="sitl", active_source="sitl"),
+        stop_event=threading.Event(),
+    )
+    return sender, client
+
+
+def test_command_sender_set_servo_uses_mav_cmd_do_set_servo() -> None:
+    sender, client = _sender_with_fake_client()
+
+    sender._send_action(
+        ActionCommand(
+            action_type=ActionType.SET_SERVO,
+            params={"channel": 9, "pwm": 1900},
+        )
+    )
+
+    call = client.master.mav.command_long_calls[-1]
+    assert call[2] == mavutil.mavlink.MAV_CMD_DO_SET_SERVO
+    assert call[4:11] == (9.0, 1900.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+
+def test_command_sender_set_relay_uses_mav_cmd_do_set_relay() -> None:
+    sender, client = _sender_with_fake_client()
+
+    sender._send_action(
+        ActionCommand(
+            action_type=ActionType.SET_RELAY,
+            params={"relay_id": 0, "state": True},
+        )
+    )
+
+    call = client.master.mav.command_long_calls[-1]
+    assert call[2] == mavutil.mavlink.MAV_CMD_DO_SET_RELAY
+    assert call[4:11] == (0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+
+def test_command_sender_release_payload_does_not_emit_mavlink_without_mapping() -> None:
+    sender, client = _sender_with_fake_client()
+
+    sender._send_action(
+        ActionCommand(
+            action_type=ActionType.RELEASE_PAYLOAD,
+            params={"payload_id": 1},
+        )
+    )
+
+    assert client.master.mav.command_long_calls == []

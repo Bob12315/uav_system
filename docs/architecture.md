@@ -5,8 +5,8 @@
 ## 总体原则
 
 ```text
-mission_manager 决定“现在做什么”
-flight_modes 决定“这件事怎么飞”
+missions 决定“现在做什么”
+missions/<name>/stages 决定“当前阶段怎么飞”
 command_shaper 决定“命令是否过猛”
 executor 决定“怎么交给 telemetry_link”
 telemetry_link 决定“怎么发 MAVLink”
@@ -15,7 +15,7 @@ telemetry_link 决定“怎么发 MAVLink”
 任何模式输出都必须经过：
 
 ```text
-FlightMode.update()
+MissionStage.update()
   -> FlightCommand raw
   -> CommandShaper.update()
   -> FlightCommand shaped
@@ -28,19 +28,20 @@ FlightMode.update()
 职责：
 
 - `main.py`：总入口，只解析参数、加载配置、创建 `SystemRunner`。
-- `system_runner.py`：系统主循环，串联服务、融合、任务状态机、飞行模式和执行器。
-- `mission_manager.py`：任务状态机，选择 `IDLE`、`APPROACH_TRACK`、`OVERHEAD_HOLD` 等 active mode。
+- `system_runner.py`：系统主循环，串联服务、融合、mission runner、stage controller 和执行器。
+- `mission_runner.py`：调用当前 mission，处理 `MissionAction` 的 once guard，并把 action 转发给 `LinkManager`。
+- `mission_manager.py`：旧视觉跟踪状态机兼容层，后续迁移完成后可移除。
 - `service_manager.py`：启动和停止 YOLO UDP 接收、telemetry link、fusion manager。
 - `health_monitor.py`：判断 vision/drone/gimbal/fusion/control 健康状态。
 - `debug_runtime.py`：强制模式、强制通道开关和 dry-run 调试覆盖。
 - `app_config.py`：统一加载 `config/*.yaml`。
-- `mode_registry.py`：注册和获取 flight mode 实例。
+- `stage_registry.py`：注册和获取 mission stage controller 实例。
 
 允许依赖：
 
 - `fusion`
 - `telemetry_link`
-- `flight_modes`
+- `missions`
 - `uav_ui`
 - `config/*.yaml`
 
@@ -51,37 +52,61 @@ FlightMode.update()
 - 不直接调用 pymavlink。
 - 不绕过 `CommandShaper` 和 `FlightCommandExecutor` 发送控制。
 
-## flight_modes/
+## missions/
 
 职责：
 
-- 定义飞行模式接口。
-- 将 `FlightModeInput` 转成 `FlightCommand`。
-- 按模式拆分控制逻辑，例如斜视接近、正上方悬停。
-- 提供通用输入适配、命令限幅、命令执行出口。
+- 定义任务流程接口和通用任务输出。
+- 决定任务阶段、active stage controller 和一次性动作请求。
+- `visual_tracking/mission.py`：保留现有视觉跟踪任务行为。
+- `visual_tracking/stages/`：视觉跟踪任务的连续控制阶段，例如斜视接近、正上方悬停。
+- `rescue_competition/mission.py`：比赛任务骨架，包含起飞、航线、搜索、对准投放、侦察扫描、返航、降落的阶段框架。
+- `common/navigation.py`：任务层本地坐标转换和到点判断。
 
 允许依赖：
 
-- `fusion.models.FusedState` 只应被 `common/input_adapter.py` 使用。
-- `telemetry_link.models.ControlCommand` 只应被 `common/executor.py` 使用。
+- `missions.common.control.types.MissionStageInput`
+- `fusion.models.PerceptionTarget`
+- `telemetry_link.models.DroneState/GimbalState/LinkStatus`
+- `app.health_monitor.HealthStatus`
 
 禁止事项：
 
-- mode 里不得直接 import `telemetry_link.link_manager`。
-- mode 里不得直接发送 MAVLink。
-- mode 里不得读取 YAML。
-- mode 里不得启动线程、socket 或 UI。
-- mode 里不得决定全局任务流程跳转，任务跳转属于 `app/mission_manager.py`。
+- Mission 不直接调用 pymavlink。
+- Mission 不直接构造 MAVLink message。
+- Mission 不写 PID 或控制律。
+- Mission 只能通过 `MissionAction` 请求 `takeoff`、`land`、`local_position`、`release_payload` 等通用动作。
+- Mission 不应把具体控制命令绕过 `MissionRunner` 发给 `LinkManager`。
 
-## flight_modes/common/
+## missions/<mission_name>/stages/
 
 职责：
 
-- `types.py`：公开 `FlightModeInput`、`FlightCommand`、`FlightModeStatus`。
-- `input_adapter.py`：`FusedState -> FlightModeInput`。
+- 定义任务内部阶段控制器。
+- 将 `MissionStageInput` 转成 `FlightCommand`。
+- 按任务阶段拆分控制逻辑，例如视觉跟踪任务里的斜视接近、正上方悬停。
+
+允许依赖：
+
+- `missions.common.control.types`
+
+禁止事项：
+
+- stage controller 里不得直接 import `telemetry_link.link_manager`。
+- stage controller 里不得直接发送 MAVLink。
+- stage controller 里不得读取 YAML。
+- stage controller 里不得启动线程、socket 或 UI。
+- stage controller 里不得决定全局任务流程跳转，任务跳转属于 mission。
+
+## missions/common/control/
+
+职责：
+
+- `types.py`：公开 `MissionStageInput`、`FlightCommand`、`MissionStageStatus`。
+- `input_adapter.py`：`FusedState -> MissionStageInput`。
 - `command_shaper.py`：统一限幅、slew rate、disabled 通道归零。
 - `executor.py`：将 shaped `FlightCommand` 交给 `telemetry_link`。
-- `debug_config.py`：flight mode 层调试配置。
+- `debug_config.py`：stage controller 层调试配置。
 
 禁止事项：
 
@@ -129,8 +154,8 @@ FlightMode.update()
 
 - 不读取 YOLO UDP。
 - 不计算目标跟踪控制律。
-- 不依赖 `flight_modes` 或 `app`。
-- 不决定 `APPROACH_TRACK` / `OVERHEAD_HOLD`。
+- 不依赖 mission stage controller 或 `app`。
+- 不决定任务阶段或 `APPROACH_TRACK` / `OVERHEAD_HOLD`。
 
 ## yolo_app/
 
@@ -160,7 +185,7 @@ FlightMode.update()
 禁止事项：
 
 - 不直接解析 YOLO 图像。
-- 不直接计算 flight mode 控制律。
+- 不直接计算 stage controller 控制律。
 - 不绕过 `telemetry_link` 发送 MAVLink。
 
 ## config/
@@ -168,9 +193,8 @@ FlightMode.update()
 职责：
 
 - `app.yaml`：运行时、服务开关、executor。
-- `mission.yaml`：任务初始模式、模式切换条件、恢复策略。
-- `flight_modes.yaml`：input adapter、各控制器参数、shaper。
 - `telemetry.yaml`：MAVLink 连接和消息频率。
+- `../missions/<mission_name>/config.yaml`：具体 mission 的任务参数、input adapter、阶段控制器参数、shaper。
 
 禁止事项：
 
@@ -182,7 +206,7 @@ FlightMode.update()
 职责：
 
 - 覆盖纯逻辑和接口契约。
-- 优先测试 input adapter、mission manager、flight mode、command shaper。
+- 优先测试 input adapter、missions、mission runner、stage controller、command shaper。
 
 禁止事项：
 

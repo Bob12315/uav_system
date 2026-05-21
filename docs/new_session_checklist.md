@@ -17,9 +17,10 @@ docs/safety.md
 
 读完后，AI 必须能说明：
 
-- `app/`、`flight_modes/`、`fusion/`、`telemetry_link/`、`yolo_app/`、`uav_ui/` 分别负责什么。
-- `FlightModeInput`、`FlightCommand`、`LinkManager` 的接口边界。
-- 为什么 flight mode 不能直接调用 MAVLink。
+- `app/`、`missions/visual_tracking/stages/`、`fusion/`、`telemetry_link/`、`yolo_app/`、`uav_ui/` 分别负责什么。
+- `missions/` 与 `app/mission_runner.py` 分别负责什么。
+- `MissionStageInput`、`FlightCommand`、`LinkManager` 的接口边界。
+- 为什么 mission stage controller 不能直接调用 MAVLink。
 - 为什么所有控制命令必须经过 `CommandShaper` 和 `FlightCommandExecutor`。
 - 为什么 `send_commands` 默认不能打开。
 
@@ -38,29 +39,29 @@ docs/control_flow.md
 docs/safety.md
 
 不要绕过 CommandShaper 和 FlightCommandExecutor。
-不要让 flight mode 直接调用 telemetry_link。
+不要让 mission stage controller 直接调用 telemetry_link。
 不要默认打开 send_commands。
-不要把 YOLO、fusion、telemetry、flight mode、UI 的职责混在一起。
+不要把 YOLO、fusion、telemetry、mission stage controller、UI 的职责混在一起。
 
 看完后先用简短中文总结你理解的模块边界，再执行我的任务。
 ```
 
 ## 按任务追加阅读
 
-### 改控制算法或 flight mode
+### 改控制算法或 mission stage controller
 
 追加阅读：
 
 ```text
-flight_modes/README.md
-config/flight_modes.yaml
-flight_modes/base_mode.py
-flight_modes/common/types.py
-flight_modes/common/input_adapter.py
-flight_modes/common/command_shaper.py
-flight_modes/common/executor.py
-flight_modes/approach_track/mode.py
-flight_modes/overhead_hold/mode.py
+missions/README.md
+missions/<mission_name>/config.yaml
+missions/base_stage.py
+missions/common/control/types.py
+missions/common/control/input_adapter.py
+missions/common/control/command_shaper.py
+missions/common/control/executor.py
+missions/visual_tracking/stages/approach_track/mode.py
+missions/visual_tracking/stages/overhead_hold/mode.py
 tests/test_approach_track.py
 tests/test_overhead_hold.py
 tests/test_command_shaper.py
@@ -69,8 +70,8 @@ tests/test_command_shaper.py
 允许主要修改：
 
 ```text
-flight_modes/
-config/flight_modes.yaml
+missions/visual_tracking/stages/
+missions/<mission_name>/config.yaml
 tests/test_*.py
 ```
 
@@ -88,23 +89,32 @@ yolo_app/
 
 ```text
 app/README.md
-app/mission_manager.py
 app/system_runner.py
-app/mode_registry.py
+app/mission_runner.py
+app/stage_registry.py
 app/health_monitor.py
+missions/base.py
+missions/visual_tracking.py
+missions/rescue_competition.py
+missions/common/navigation.py
 config/app.yaml
-config/mission.yaml
+missions/visual_tracking/config.yaml
+missions/rescue_competition/config.yaml
 tests/test_mission_manager.py
+tests/test_mission_runner.py
+tests/test_visual_tracking_mission.py
+tests/test_rescue_competition_mission.py
 ```
 
 允许主要修改：
 
 ```text
-app/mission_manager.py
-app/mode_registry.py
+missions/
+app/mission_runner.py
+app/system_runner.py
 config/app.yaml
-config/mission.yaml
-tests/test_mission_manager.py
+missions/<mission_name>/config.yaml
+tests/test_*mission*.py
 ```
 
 不要碰：
@@ -112,7 +122,7 @@ tests/test_mission_manager.py
 ```text
 telemetry_link/command_sender.py
 yolo_app/
-flight_modes/<mode>/ 控制公式，除非任务明确要求
+missions/visual_tracking/stages/<mode>/ 控制公式，除非任务明确要求
 ```
 
 ### 改 telemetry 或 MAVLink
@@ -144,7 +154,7 @@ docs/interfaces.md
 不要碰：
 
 ```text
-flight_modes/<mode>/ 控制算法
+missions/visual_tracking/stages/<mode>/ 控制算法
 yolo_app/
 fusion/，除非 telemetry 状态接口变化
 ```
@@ -176,8 +186,8 @@ docs/interfaces.md，若 UDP 字段变化
 
 ```text
 telemetry_link/
-flight_modes/
-app/mission_manager.py
+missions/visual_tracking/stages/
+missions/
 ```
 
 ### 改 fusion
@@ -189,7 +199,7 @@ fusion/README.md
 fusion/models.py
 fusion/fusion_manager.py
 fusion/rules.py
-flight_modes/common/input_adapter.py
+missions/common/control/input_adapter.py
 docs/interfaces.md
 ```
 
@@ -197,7 +207,7 @@ docs/interfaces.md
 
 ```text
 fusion/
-flight_modes/common/input_adapter.py，若 FusedState 字段变化
+missions/common/control/input_adapter.py，若 FusedState 字段变化
 docs/interfaces.md
 tests/
 ```
@@ -207,7 +217,7 @@ tests/
 ```text
 telemetry_link/command_sender.py
 yolo_app/ tracking 逻辑
-flight_modes/<mode>/ 控制公式，除非字段语义变化
+missions/visual_tracking/stages/<mode>/ 控制公式，除非字段语义变化
 ```
 
 ### 改 UI
@@ -233,7 +243,7 @@ app/system_runner.py 的 UI 挂接部分
 不要碰：
 
 ```text
-flight_modes/<mode>/ 控制公式
+missions/visual_tracking/stages/<mode>/ 控制公式
 telemetry_link/command_sender.py
 yolo_app/
 ```
@@ -247,8 +257,9 @@ docs/running.md
 docs/install.md
 docs/configuration.md
 config/app.yaml
-config/mission.yaml
-config/flight_modes.yaml
+missions/visual_tracking/config.yaml
+missions/rescue_competition/config.yaml
+missions/<mission_name>/config.yaml
 config/telemetry.yaml
 yolo_app/config.yaml
 ```
@@ -303,7 +314,7 @@ python -m telemetry_link.main --help
 ## 禁止默认行为
 
 - 禁止默认打开 `send_commands`。
-- 禁止让 flight mode 直接调用 `LinkManager`。
+- 禁止让 mission stage controller 直接调用 `LinkManager`。
 - 禁止绕过 `CommandShaper`。
 - 禁止绕过 `FlightCommandExecutor`。
 - 禁止让 YOLO 进程连接 MAVLink。

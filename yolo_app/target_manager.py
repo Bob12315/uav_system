@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from config import AppConfig
-from models import CommandMessage, CurrentTarget, Track
-from utils import normalize_error
+try:
+    from .config import AppConfig
+    from .models import CommandMessage, CurrentTarget, DetectionObject, SceneDetections, Track
+    from .utils import normalize_error
+except ImportError:
+    from config import AppConfig
+    from models import CommandMessage, CurrentTarget, DetectionObject, SceneDetections, Track
+    from utils import normalize_error
 
 
 @dataclass(slots=True)
@@ -187,3 +192,22 @@ class TargetManager:
         width = max(1, int(image_width))
         height = max(1, int(image_height))
         return max(track.w / width, track.h / height)
+
+
+def build_scene_detections(
+    tracks: list[Track],
+    image_width: int,
+    image_height: int,
+    frame_id: int,
+    timestamp: float,
+) -> SceneDetections:
+    return SceneDetections(
+        timestamp=float(timestamp),
+        frame_id=int(frame_id),
+        image_width=int(image_width),
+        image_height=int(image_height),
+        detections=[
+            DetectionObject.from_track(track, image_width, image_height)
+            for track in tracks
+        ],
+    )

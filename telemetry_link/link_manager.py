@@ -508,6 +508,42 @@ class LinkManager:
             )
         )
 
+    def set_servo(self, channel: int, pwm: int, priority: int = 3) -> None:
+        self.submit_action_command(
+            ActionCommand(
+                action_type=ActionType.SET_SERVO,
+                params={"channel": int(channel), "pwm": int(pwm)},
+                priority=priority,
+                retries_left=self.cfg.action_cmd_retries,
+                retry_interval_sec=self.cfg.action_retry_interval_sec,
+                created_at=time.time(),
+            )
+        )
+
+    def set_relay(self, relay_id: int, state: bool, priority: int = 3) -> None:
+        self.submit_action_command(
+            ActionCommand(
+                action_type=ActionType.SET_RELAY,
+                params={"relay_id": int(relay_id), "state": bool(state)},
+                priority=priority,
+                retries_left=self.cfg.action_cmd_retries,
+                retry_interval_sec=self.cfg.action_retry_interval_sec,
+                created_at=time.time(),
+            )
+        )
+
+    def release_payload(self, payload_id: int, priority: int = 3) -> None:
+        self.submit_action_command(
+            ActionCommand(
+                action_type=ActionType.RELEASE_PAYLOAD,
+                params={"payload_id": int(payload_id)},
+                priority=priority,
+                retries_left=0,
+                retry_interval_sec=self.cfg.action_retry_interval_sec,
+                created_at=time.time(),
+            )
+        )
+
     def request_message_interval(self, message_name: str, rate_hz: float, priority: int = 6) -> None:
         self.submit_action_command(
             ActionCommand(

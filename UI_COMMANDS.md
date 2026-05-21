@@ -102,24 +102,22 @@ control send off
 control send toggle
 ```
 
-## 任务模式切换
+## Stage Override
 
-仅 app/control UI 支持。`task` 也可以写成 `mission`。
+仅 app/control UI 支持。用于临时强制当前 mission 的 stage controller，主要用于调试控制模块，不是切换 mission。
+
+`task` 仍可作为兼容别名，但建议新命令统一用 `stage`。
 
 格式：
 
 ```text
-task <MODE_NAME>
-task mode <MODE_NAME>
-mission <MODE_NAME>
-mission mode <MODE_NAME>
-task auto
-task clear
-mission auto
-mission clear
+stage <STAGE_CONTROLLER>
+stage mode <STAGE_CONTROLLER>
+stage auto
+stage clear
 ```
 
-当前 app 任务模式支持：
+当前 app stage controller 支持：
 
 ```text
 APPROACH_TRACK
@@ -133,15 +131,65 @@ clear
 示例：
 
 ```text
-task mode APPROACH_TRACK
-task mode OVERHEAD_HOLD
-task mode CORRIDOR_FOLLOW
-task mode IDLE
-task auto
-mission clear
+stage mode APPROACH_TRACK
+stage mode OVERHEAD_HOLD
+stage mode CORRIDOR_FOLLOW
+stage mode IDLE
+stage auto
 ```
 
-`auto` 和 `clear` 会取消强制任务模式，恢复 mission manager 自动切换。
+`auto` 和 `clear` 会取消强制 stage override，恢复 mission 自动选择 stage controller。
+
+## Mission 切换
+
+仅 app/control UI 支持。用于运行中切换当前 mission。
+
+```text
+mission list
+mission current
+mission status
+mission switch <MISSION_NAME>
+mission select <MISSION_NAME>
+mission use <MISSION_NAME>
+mission start
+mission reset
+```
+
+当前支持：
+
+```text
+visual_tracking
+rescue_competition
+```
+
+示例：
+
+```text
+mission list
+mission switch visual_tracking
+mission switch rescue_competition
+mission start
+mission reset
+```
+
+切换或重置 mission 时会清掉当前连续控制队列、重置 stage controller/shaper 状态，并把 `SEND` 置为 `OFF`。确认状态安全后再输入：
+
+`mission start` 会请求当前 mission 开始执行。对 `rescue_competition` 来说，它会从 `PREPARE` 等待本地位置有效后进入 `TAKEOFF`。
+
+```text
+control send on
+```
+
+## Stage 参数重载
+
+仅 app/control UI 支持。用于运行中重载 [missions/<mission_name>/config.yaml](missions/<mission_name>/config.yaml)。
+
+```text
+pid reload
+stage reload
+stage config reload
+stage controllers reload
+```
 
 ## MAVLink 手动命令
 

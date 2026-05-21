@@ -108,19 +108,19 @@ fused_state = manager.update(perception_target, drone_state, gimbal_state)
 当前工程里，`FusedState` 的下一跳已经明确为控制层输入适配器：
 
 ```python
-from flight_modes.common.input_adapter import FlightModeInputAdapter
+from missions.common.control.input_adapter import StageInputAdapter
 
-adapter = FlightModeInputAdapter()
-flight_input = adapter.adapt(fused_state)
+adapter = StageInputAdapter()
+stage_input = adapter.adapt(fused_state)
 ```
 
-这里的 `FlightModeInputAdapter` 负责：
+这里的 `StageInputAdapter` 负责：
 
 - `dt` 计算
 - source age 计算
 - 跟踪连续性判断
 - 轻量一阶低通滤波
-- 将 `FusedState` 映射为 flight mode 统一输入 `FlightModeInput`
+- 将 `FusedState` 映射为 mission stage 统一输入 `MissionStageInput`
 
 它不是控制器，不负责：
 

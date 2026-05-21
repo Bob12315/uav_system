@@ -92,7 +92,7 @@ python -m app.main --connect-telemetry --force-mode APPROACH_TRACK --send-comman
 
 ## 7. body low-speed live
 
-先降低 `config/flight_modes.yaml`：
+先降低 `missions/<mission_name>/config.yaml`：
 
 ```yaml
 shaper:

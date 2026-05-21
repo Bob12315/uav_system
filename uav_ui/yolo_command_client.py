@@ -26,3 +26,8 @@ class YoloCommandClient:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.sendto(data, (self.config.ip, int(self.config.port)))
 
+    def lock_target(self, track_id: int) -> None:
+        self.send("lock_target", track_id=track_id)
+
+    def unlock_target(self) -> None:
+        self.send("unlock_target")
