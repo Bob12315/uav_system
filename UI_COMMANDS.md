@@ -288,6 +288,24 @@ gimbal_manager_configure 1
 gimbal_manager_configure 1 1 1
 ```
 
+### 载荷和通道动作
+
+这些是低层 MAVLink action 命令，可从 UI 手动输入。`set_servo` 和 `set_relay` 会直接排队发送；`release_payload` 当前没有通用 `payload_id -> servo/relay` 映射，因此会安全拒绝。比赛 mission 应优先通过 `missions/rescue_competition/config.yaml` 配置载荷映射，让 mission 输出 `set_servo` 或 `set_relay`。
+
+```text
+set_servo <channel> <pwm>
+set_relay <relay_id> <on|off>
+release_payload <payload_id>
+```
+
+示例：
+
+```text
+set_servo 9 1900
+set_relay 0 on
+release_payload 1
+```
+
 ### MAVLink 消息频率
 
 `message_interval` 是 `set_message_interval` 的别名。
@@ -341,3 +359,30 @@ gimbal_rate 0 20 lock
 ## 注意
 
 在 app/control UI 中，输入手动 MAVLink 命令后，系统会自动关闭 control 连续命令发送，避免自动控制和人工输入同时争用飞控命令。
+
+## 命令整理结论
+
+### 保留
+
+- `quit` / `exit`：UI 本地退出命令。
+- `target next|prev|previous|lock|unlock`：已由 `yolo_app.command_receiver` 接收，其中 `previous` 是 UI 友好别名，实际发送 `switch_prev`。
+- `controller/controllers ...`：运行时 controller 开关，`controllers` 是复数别名。
+- `control send|send_commands|commands ...`：运行时发送开关。
+- `stage ...`、`stage mode ...`、`pid reload`、`stage reload`、`stage config reload`、`stage controllers reload`：app/control 调试和参数重载命令。
+- `mission list|ls|current|status|switch|select|use|start|reset`：mission 管理命令。
+- MAVLink 手动命令：`switch_source`、`mode`、`arm`、`disarm`、`takeoff`、`land`、`condition_yaw`、`change_speed`、`set_home`、`global_goto`、`local_pos`、`reposition`、`set_roi_location`、`roi_none`、`gimbal_manager_configure`、`set_servo`、`set_relay`、`set_message_interval/message_interval`、`body_vel`、`yaw_rate`、`stop`、`gimbal`、`gimbal_rate`。
+
+### 建议删除或逐步废弃
+
+- `task ...`：仍在 `uav_ui/ui_commands.py` 里作为 stage override 的旧别名，但自动补全已经不推荐它。建议保留一段兼容期后删除，统一使用 `stage ...`。
+- `release_payload <payload_id>`：当前手动输入一定会返回“payload mapping is not configured”。如果后续不打算做全局 payload 映射，建议从 UI 自动补全和用户文档中移除，只保留底层 action 类型；如果要保留，则需要补齐配置映射和测试。
+- `controllers ...`、`control send_commands ...`、`control commands ...`、`mission select/use ...` 属于易懂但重复的别名。它们不是坏命令，但会增加记忆负担；若要精简 UI，可只保留主命令 `controller`、`control send`、`mission switch`，其余作为隐式兼容别名。
+- `pid reload` 名字偏旧，实际重载的是 mission stage/controller 配置，不只是 PID。建议文档和日常使用改为 `stage config reload`，`pid reload` 作为兼容别名。
+
+### 建议改进
+
+- 自动补全和文档应跟 `command_dispatcher.py` 同步；新增手动命令时同时更新 `_MANUAL_COMMANDS`，确保 app/control UI 会自动关闭 `SEND`。
+- `stage config reload` 目前只更新 `input_adapter`、`approach_track`、`overhead_hold`、`shaper`，没有重载 `corridor_follow`。如果 `CORRIDOR_FOLLOW` 需要运行时调参，应把它纳入 `load_mission_stage_runtime_config` 和 `StageRegistry.apply_configs`。
+- `mission current/status` 当前只返回 active mission name。可以增强为同时返回 mission stage、stage controller、`SEND` 状态和 override 状态。
+- `target lock <track_id>` 建议在 UI 侧允许显示当前可选 track id，或在失败时展示最近一次 YOLO 状态，减少盲输。
+- `set_servo` / `set_relay` 风险较高，建议增加二次确认、只在 debug 模式开放，或至少在 UI 日志中更醒目地区分它们。

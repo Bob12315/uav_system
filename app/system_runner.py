@@ -29,6 +29,9 @@ from uav_ui.control_switches import ControlRuntimeSwitches
 from uav_ui.terminal_ui import run_terminal_ui
 from uav_ui.ui_commands import CommandResult, build_ui_command_handler, format_controller_snapshot
 from uav_ui.yolo_command_client import YoloCommandClient
+from web_ui.config_store import MissionConfigStore
+from web_ui.processes import YoloProcessManager
+from web_ui.state import WebStateProvider
 
 
 class SystemRunner:
@@ -74,6 +77,7 @@ class SystemRunner:
         self.last_send_commands: bool | None = None
         self.target_lost_since: float | None = None
         self.lost_target_recenter_sent = False
+        self.web_ui_server = None
 
     def run(self) -> None:
         self.services.start()
@@ -81,7 +85,9 @@ class SystemRunner:
         self.blackbox.start()
         self.executor.set_telemetry_link(self.services.link_manager)
         try:
-            if self.config.runtime.ui_enabled and self.services.link_manager is not None:
+            if self.config.runtime.web_ui_enabled:
+                self._run_with_web_ui()
+            elif self.config.runtime.ui_enabled and self.services.link_manager is not None:
                 self._run_with_ui()
             else:
                 if self.config.runtime.ui_enabled and self.services.link_manager is None:
@@ -94,12 +100,16 @@ class SystemRunner:
         self.stop_event.set()
         self.executor.reset()
         self.blackbox.close()
+        if self.web_ui_server is not None:
+            self.web_ui_server.stop()
+            self.web_ui_server = None
         self.services.stop()
         self.logger.info("app runtime stopped")
 
-    def _run_with_ui(self) -> None:
-        assert self.services.link_manager is not None
-        ui_command_handler = build_ui_command_handler(
+    def _build_runtime_command_handler(self):
+        if self.services.link_manager is None:
+            return None
+        return build_ui_command_handler(
             self.services.link_manager,
             controller_switches=self.controller_switches,
             yolo_client=YoloCommandClient(self.config.yolo_command),
@@ -107,6 +117,11 @@ class SystemRunner:
             stage_override_handler=self._set_stage_override,
             stage_config_reload_handler=self._reload_mission_stage_config,
         )
+
+    def _run_with_ui(self) -> None:
+        assert self.services.link_manager is not None
+        ui_command_handler = self._build_runtime_command_handler()
+        assert ui_command_handler is not None
         control_thread = threading.Thread(
             name="AppControlLoop",
             target=self._control_loop,
@@ -123,6 +138,34 @@ class SystemRunner:
         finally:
             self.stop_event.set()
             control_thread.join(timeout=1.0)
+
+    def _run_with_web_ui(self) -> None:
+        from web_ui.server import WebUIServer
+
+        self.web_ui_server = WebUIServer(
+            host=self.config.runtime.web_host,
+            port=self.config.runtime.web_port,
+            command_handler=self._build_runtime_command_handler(),
+            state_provider=WebStateProvider(
+                self,
+                yolo_mjpeg_url=self.config.runtime.yolo_mjpeg_url,
+            ),
+            config_store=MissionConfigStore(
+                lambda: self.config.mission_config_path,
+                self._reload_mission_stage_config,
+            ),
+            yolo_process=YoloProcessManager(
+                project_root=Path(__file__).resolve().parent.parent,
+            ),
+            yolo_mjpeg_url=self.config.runtime.yolo_mjpeg_url,
+        )
+        self.web_ui_server.start()
+        self.logger.info(
+            "Web UI listening at http://%s:%s",
+            self.config.runtime.web_host,
+            self.config.runtime.web_port,
+        )
+        self._control_loop()
 
     def _control_loop(self) -> None:
         loop_sleep_sec = 1.0 / max(self.config.runtime.loop_hz, 0.1)
@@ -346,6 +389,21 @@ class SystemRunner:
             )
         if action in {"current", "status"}:
             return CommandResult(True, f"active mission={self.mission_runner.mission.name}")
+        if action == "stage":
+            if len(parts) != 2:
+                return CommandResult(False, "format: mission stage <stage_name>")
+            setter = getattr(self.mission_runner.mission, "set_stage", None)
+            if not callable(setter):
+                return CommandResult(False, f"mission stage unsupported: {self.mission_runner.mission.name}")
+            try:
+                with self.runtime_config_lock:
+                    setter(parts[1])
+                    self.stage_registry.reset_all()
+                    with self.control_command_log_lock:
+                        self.latest_mission_stage = parts[1].strip().upper()
+                return CommandResult(True, f"mission stage set: {parts[1].strip().upper()}")
+            except Exception as exc:
+                return CommandResult(False, f"mission stage failed: {exc}")
         if action == "start":
             starter = getattr(self.mission_runner.mission, "start", None)
             if not callable(starter):

@@ -1,5 +1,5 @@
 # YOLO 模型权重路径，支持官方模型或自定义训练得到的 .pt 文件
-model_path: "/home/level6/uav_project/src/yolo_app/best.pt"
+model_path: "../data/models/best.pt"
 
 # 视频输入源：
 # 1. 如果是本地视频设备，请填写 /dev/videoX
@@ -67,3 +67,24 @@ command_port: 5006
 
 # OpenCV 显示窗口名称，show=true 时生效
 window_name: "YOLO Tracking"
+
+# 是否开启 MJPEG HTTP 输出，供 Web UI 浏览器显示标注画面
+mjpeg_enabled: true
+
+# MJPEG HTTP 监听地址；默认仅本机访问
+mjpeg_host: "127.0.0.1"
+
+# MJPEG HTTP 监听端口
+mjpeg_port: 8010
+
+# MJPEG 视频路径
+mjpeg_path: "/video.mjpeg"
+
+# JPEG 质量，范围 1-100
+mjpeg_quality: 75
+
+# 最大编码帧率；慢客户端自动跳帧
+mjpeg_max_fps: 15
+
+# MJPEG 最大输出宽度，超过会等比缩放
+mjpeg_max_width: 1280

@@ -18,3 +18,5 @@ __pycache__/
 
 logs/
 yolo_app/logs/
+runtime/logs/
+runtime/sitl/

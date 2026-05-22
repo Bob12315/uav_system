@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import cv2
 
-from config import AppConfig
-from models import CurrentTarget, Track
+try:
+    from config import AppConfig
+    from models import CurrentTarget, Track
+except ImportError:
+    from yolo_app.config import AppConfig
+    from yolo_app.models import CurrentTarget, Track
 
 
 class Annotator:

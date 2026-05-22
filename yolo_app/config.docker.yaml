@@ -1,0 +1,40 @@
+model_path: "../data/models/best.pt"
+
+# For compose-local RTP/H264 input, publish UDP 5600 in docker-compose.yml.
+# For USB cameras, mount /dev/video0 and set source: "/dev/video0".
+source: 5600
+
+img_size: 640
+conf_thres: 0.25
+iou_thres: 0.45
+tracker: "bytetrack.yaml"
+
+# Use "cpu" for a portable first run. Set "0" after enabling NVIDIA runtime.
+device: "cpu"
+classes: []
+
+udp_ip: "uav-control"
+udp_port: 5005
+
+selection_mode: "class"
+target_class: "target"
+max_lost_frames: 5
+
+show: false
+save_video: false
+save_path: "runtime/track_output.mp4"
+line_width: 5
+show_all_tracks: true
+
+command_enabled: true
+command_ip: "0.0.0.0"
+command_port: 5006
+window_name: "YOLO Tracking"
+
+mjpeg_enabled: true
+mjpeg_host: "0.0.0.0"
+mjpeg_port: 8010
+mjpeg_path: "/video.mjpeg"
+mjpeg_quality: 75
+mjpeg_max_fps: 15
+mjpeg_max_width: 1280

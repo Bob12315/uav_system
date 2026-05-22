@@ -1,4 +1,0 @@
-pymavlink
-pyyaml
-numpy
-pytest

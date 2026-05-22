@@ -15,7 +15,7 @@ services:
 
 blackbox:
   enabled: true
-  output_dir: logs/blackbox
+  output_dir: runtime/logs/blackbox
   sample_hz: 20
   flush_every: 20
   rotate_mb: 100

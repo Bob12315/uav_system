@@ -1,0 +1,64 @@
+services:
+  uav-control:
+    build:
+      context: .
+      dockerfile: Dockerfile.control
+    image: uav-project-control:local
+    container_name: uav-control
+    init: true
+    environment:
+      UAV_YOLO_START_COMMAND: "echo 'YOLO runs as the uav-yolo compose service; use docker compose up uav-yolo'"
+    volumes:
+      - ./runtime:/app/runtime
+      - ./data/models:/app/data/models:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+      - "5005:5005/udp"
+    command:
+      - python
+      - -m
+      - app.main
+      - --app-config
+      - config/app.docker.yaml
+    restart: unless-stopped
+
+  uav-yolo:
+    build:
+      context: .
+      dockerfile: Dockerfile.yolo
+    image: uav-project-yolo:local
+    container_name: uav-yolo
+    init: true
+    profiles:
+      - yolo
+    depends_on:
+      - uav-control
+    volumes:
+      - ./runtime:/app/runtime
+      - ./data/models:/app/data/models:ro
+      # Enable this for USB camera input, then set source: /dev/video0.
+      # - /dev/video0:/dev/video0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8010:8010"
+      - "5006:5006/udp"
+      # Enable this when receiving RTP/H264 video on UDP 5600 from outside Docker.
+      # - "5600:5600/udp"
+    command:
+      - python
+      - -m
+      - yolo_app.main
+      - --config
+      - yolo_app/config.docker.yaml
+    restart: unless-stopped
+
+  # Optional SITL helper shape. Keep disabled until a simulator command is chosen.
+  # ardupilot-sitl:
+  #   image: your-sitl-image
+  #   profiles:
+  #     - sitl
+  #   ports:
+  #     - "5762:5762"

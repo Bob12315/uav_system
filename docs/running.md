@@ -54,7 +54,53 @@ python -m app.main --connect-telemetry --ui --send-commands false
 
 这是 curses 终端 UI，不是网页 GUI。当前 UI 依赖 `LinkManager`，所以需要 `--connect-telemetry`。
 
-## 5. 独立 telemetry 服务
+## 5. app + Web UI
+
+先安装 Web UI 依赖：
+
+```bash
+pip install -r requirements/web.txt
+```
+
+默认启动控制端 Web UI：
+
+```bash
+cd ~/uav_project/src
+python -m app.main
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:8000
+```
+
+在 Web UI 左侧 `Services / 服务` 点击 `Start YOLO / 启动 YOLO`，后端会执行等价命令：
+
+```bash
+conda activate yolo
+python3 ~/uav_project/src/yolo_app/main.py --show false
+```
+
+YOLO 默认会同时输出 UDP JSON 和 MJPEG 标注画面。MJPEG 默认地址：
+
+```text
+http://127.0.0.1:8010/video.mjpeg
+```
+
+可选参数：
+
+```bash
+python -m app.main \
+  --web-host 127.0.0.1 \
+  --web-port 8000 \
+  --yolo-mjpeg-url http://127.0.0.1:8010/video.mjpeg \
+  --send-commands false
+```
+
+Web UI 默认只监听本机。`control send on`、`mission start`、`arm`、`takeoff`、`land`、`disarm`、payload/servo/relay 等危险命令会在前端二次确认。
+
+## 6. 独立 telemetry 服务
 
 ```bash
 python -m telemetry_link.main --config config/telemetry.yaml
@@ -66,7 +112,7 @@ python -m telemetry_link.main --config config/telemetry.yaml
 python -m telemetry_link.main --config config/telemetry.yaml --ui
 ```
 
-## 6. SITL 低风险顺序
+## 7. SITL 低风险顺序
 
 1. 启动 SITL。
 2. 启动 YOLO 或用 `--no-yolo-udp` 做空输入测试。
@@ -88,7 +134,7 @@ python -m app.main --connect-telemetry --force-mode APPROACH_TRACK --send-comman
 python -m app.main --connect-telemetry --force-mode APPROACH_TRACK --send-commands true
 ```
 
-## 7. 常用组合
+## 8. 常用组合
 
 只看 YOLO/fusion/control 计算，不连飞控：
 
@@ -138,12 +184,23 @@ python -m app.main \
 
 注意：`rescue_competition` 默认 `auto_start: false`，不会自动起飞。它目前是阶段框架，不是完整比赛自动化。
 
-## 8. 排查提示
+## 9. 排查提示
 
 没有 UI：
 
 - 确认是否传了 `--ui`。
 - 确认是否传了 `--connect-telemetry`。
+
+没有 Web UI：
+
+- 确认是否安装 `requirements/web.txt`。
+- 确认浏览器访问的是 `http://127.0.0.1:8000` 或你指定的 `--web-port`。
+
+Web UI 没有视频：
+
+- 确认 YOLO 已启动且 `mjpeg_enabled: true`。
+- 直接访问 `http://127.0.0.1:8010/video.mjpeg` 检查 MJPEG 输出。
+- 检查控制端 `--yolo-mjpeg-url` 是否与 YOLO 的 `mjpeg_host/mjpeg_port/mjpeg_path` 一致。
 
 收不到 YOLO：
 

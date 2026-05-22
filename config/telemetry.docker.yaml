@@ -1,0 +1,55 @@
+data_source: sitl
+active_source: sitl
+
+sitl:
+  connection_type: tcp
+  serial_port: /dev/ttyUSB1
+  baudrate: 115200
+  udp_mode: udpin
+  udp_host: 0.0.0.0
+  udp_port: 14550
+  tcp_host: host.docker.internal
+  tcp_port: 5762
+
+real:
+  connection_type: serial
+  serial_port: /dev/ttyUSB0
+  baudrate: 57600
+  udp_mode: udpin
+  udp_host: 0.0.0.0
+  udp_port: 14550
+  tcp_host: host.docker.internal
+  tcp_port: 5762
+
+control_send_rate_hz: 10
+action_cmd_retries: 3
+action_retry_interval_sec: 0.5
+heartbeat_timeout_sec: 3.0
+rx_timeout_sec: 2.0
+reconnect_interval_sec: 2.0
+receiver_idle_sleep_sec: 0.01
+sender_idle_sleep_sec: 0.01
+request_message_intervals: true
+gimbal_mount_mode: 2
+gimbal_yaw_min_deg: -180.0
+gimbal_yaw_max_deg: 180.0
+gimbal_pitch_min_deg: -180.0
+gimbal_pitch_max_deg: 180.0
+
+message_interval_hz:
+  HEARTBEAT: 1
+  ATTITUDE: 10
+  GLOBAL_POSITION_INT: 10
+  LOCAL_POSITION_NED: 10
+  VFR_HUD: 5
+  SYS_STATUS: 2
+  GPS_RAW_INT: 2
+  RC_CHANNELS: 2
+  MOUNT_STATUS: 5
+  GIMBAL_DEVICE_ATTITUDE_STATUS: 10
+
+state_udp_enabled: true
+ui_enabled: false
+state_udp_ip: "127.0.0.1"
+state_udp_port: 5010
+log_level: INFO

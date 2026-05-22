@@ -89,7 +89,7 @@ class PayloadReleaseTiming:
 class RecceMissionConfig:
     config: RecceConfig = field(default_factory=RecceConfig)
     scan_duration_s: float = 8.0
-    output_dir: str = "logs/recce"
+    output_dir: str = "runtime/logs/recce"
     output_json: bool = True
     output_csv: bool = True
 
@@ -201,6 +201,9 @@ class RescueCompetitionMission:
 
     def start(self) -> None:
         self._start_requested = True
+
+    def set_stage(self, stage: str) -> None:
+        self._transition_to(self._stage_value(stage))
 
     def update(self, context: MissionContext) -> MissionOutput:
         previous = self._stage
@@ -901,7 +904,7 @@ def _recce_mission_config(item: Any, legacy_scan_duration: Any = None) -> RecceM
             vote_min_confidence_sum=float(item.get("vote_min_confidence_sum", 1.2)),
         ),
         scan_duration_s=float(item.get("scan_duration_s", scan_default)),
-        output_dir=str(item.get("output_dir", "logs/recce")),
+        output_dir=str(item.get("output_dir", "runtime/logs/recce")),
         output_json=_strict_bool(item.get("output_json", True)),
         output_csv=_strict_bool(item.get("output_csv", True)),
     )

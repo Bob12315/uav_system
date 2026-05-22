@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from ultralytics import YOLO
-
-from config import AppConfig
-from models import Track
+try:
+    from config import AppConfig
+    from models import Track
+except ImportError:
+    from yolo_app.config import AppConfig
+    from yolo_app.models import Track
 
 
 class TrackerRunner:
@@ -15,6 +17,8 @@ class TrackerRunner:
     """
 
     def __init__(self, cfg: AppConfig) -> None:
+        from ultralytics import YOLO
+
         self.cfg = cfg
         self.model = YOLO(cfg.model_path)
 

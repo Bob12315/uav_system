@@ -1,0 +1,29 @@
+.git/
+__pycache__/
+*.py[cod]
+*$py.class
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+runtime/logs/
+runtime/sitl/
+logs/
+yolo_app/logs/
+
+*.log
+*.avi
+*.mp4
+*.mov
+
+# Model weights are mounted at runtime instead of baked into images.
+*.pt
+*.onnx
+*.engine
+
+# Local simulator/runtime artifacts.
+eeprom.bin
+mav.parm
+mav.tlog
+mav.tlog.raw

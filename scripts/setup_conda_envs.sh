@@ -40,10 +40,10 @@ install_requirements() {
 }
 
 create_env_if_missing "${CONTROL_ENV}" "${CONTROL_PYTHON}"
-install_requirements "${CONTROL_ENV}" "requirements-control.txt"
+install_requirements "${CONTROL_ENV}" "requirements/control.txt"
 
 create_env_if_missing "${YOLO_ENV}" "${YOLO_PYTHON}"
-install_requirements "${YOLO_ENV}" "requirements-yolo.txt"
+install_requirements "${YOLO_ENV}" "requirements/yolo.txt"
 
 echo
 echo "Control environment:"

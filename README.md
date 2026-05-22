@@ -8,7 +8,7 @@
 - 斜视接近 `APPROACH_TRACK`。
 - 正上方悬停 `OVERHEAD_HOLD`。
 - 统一命令限幅、平滑和 dry-run 安全出口。
-- curses 终端 UI 与手动控制命令。
+- 浏览器 Web UI、curses 终端 UI 与手动控制命令。
 
 ## 架构概览
 
@@ -44,7 +44,12 @@ fusion/           感知与遥测融合
 telemetry_link/   MAVLink2 通讯、状态缓存、命令队列和发送
 yolo_app/         YOLO + ByteTrack 感知进程
 uav_ui/           终端 UI 与人工命令分发
+web_ui/           浏览器地面站 MVP
 config/           新架构配置入口
+data/             地形数据、模型权重等运行资产
+requirements/     control / yolo Python 依赖清单
+runtime/          SITL 文件、日志、黑盒输出等运行产物
+scripts/          环境安装和烟测脚本
 tests/            单元测试
 docs/             架构、接口、运行、安全和开发规则
 ```
@@ -57,6 +62,7 @@ docs/             架构、接口、运行、安全和开发规则
 conda create -n uav-control python=3.10 -y
 conda activate uav-control
 pip install pymavlink pyyaml pytest
+pip install -r requirements/web.txt
 ```
 
 ```bash
@@ -77,34 +83,51 @@ pip install ultralytics opencv-python pyyaml
 
 ## 快速运行
 
-### 1. 启动 YOLO
-
-```bash
-conda activate yolo
-cd ~/uav_project/src/yolo_app
-python main.py
-```
-
-YOLO 默认通过 UDP JSON 输出主目标。控制端默认监听 `0.0.0.0:5005`，两边端口需要一致。
-
-### 2. app dry-run，不连飞控
+### 1. 启动 Web UI
 
 ```bash
 conda activate uav-control
 cd ~/uav_project/src
-python -m app.main --send-commands false
+python -m app.main
 ```
 
-### 3. app 连接 telemetry，但不发控制
+浏览器打开：
+
+```text
+http://127.0.0.1:8000
+```
+
+在 Web UI 左侧 `Services / 服务` 点击 `Start YOLO / 启动 YOLO`，后端会执行等价命令：
+
+```bash
+conda activate yolo
+python3 ~/uav_project/src/yolo_app/main.py --show false
+```
+
+YOLO 默认通过 UDP JSON 输出主目标，并在 `127.0.0.1:8010/video.mjpeg` 输出 MJPEG 标注画面。Web UI 会代理到 `/video/yolo.mjpeg`。
+
+### 2. app 连接 telemetry，但不发控制
 
 ```bash
 python -m app.main --connect-telemetry --send-commands false
 ```
 
-### 4. app 连接 telemetry 并打开终端 UI
+### 3. app 连接 telemetry 并打开终端 UI
 
 ```bash
-python -m app.main --connect-telemetry --ui --send-commands false
+python -m app.main --no-web-ui --connect-telemetry --ui --send-commands false
+```
+
+### 4. Web UI 可选参数
+
+```bash
+python -m app.main --web-host 127.0.0.1 --web-port 8000 --send-commands false
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:8000
 ```
 
 UI 中可以在 app 运行时重载 mission stage 控制参数。修改 `missions/<mission_name>/config.yaml` 后输入：

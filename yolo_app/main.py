@@ -9,14 +9,28 @@ os.environ.setdefault("QT_QPA_FONTDIR", "/usr/share/fonts/truetype/dejavu")
 
 import cv2
 
-from annotator import Annotator
-from command_receiver import CommandReceiver
-from config import load_config
-from target_manager import TargetManager, build_scene_detections
-from tracker_runner import TrackerRunner
-from udp_publisher import UdpPublisher
-from utils import ensure_parent_dir
-from video_source import VideoSource
+try:
+    from annotator import Annotator
+    from command_receiver import CommandReceiver
+    from config import load_config
+    from frame_hub import FrameHub
+    from mjpeg_server import MjpegServer
+    from target_manager import TargetManager, build_scene_detections
+    from tracker_runner import TrackerRunner
+    from udp_publisher import UdpPublisher
+    from utils import ensure_parent_dir
+    from video_source import VideoSource
+except ImportError:
+    from yolo_app.annotator import Annotator
+    from yolo_app.command_receiver import CommandReceiver
+    from yolo_app.config import load_config
+    from yolo_app.frame_hub import FrameHub
+    from yolo_app.mjpeg_server import MjpegServer
+    from yolo_app.target_manager import TargetManager, build_scene_detections
+    from yolo_app.tracker_runner import TrackerRunner
+    from yolo_app.udp_publisher import UdpPublisher
+    from yolo_app.utils import ensure_parent_dir
+    from yolo_app.video_source import VideoSource
 
 
 def build_video_writer(save_path: str, fps: float, width: int, height: int) -> cv2.VideoWriter:
@@ -27,15 +41,32 @@ def build_video_writer(save_path: str, fps: float, width: int, height: int) -> c
 
 def main() -> int:
     cfg = load_config()
-    video_source = VideoSource(cfg.source)
-    tracker = TrackerRunner(cfg)
-    target_manager = TargetManager(cfg)
-    udp_publisher = UdpPublisher(cfg.udp_ip, cfg.udp_port)
-    command_receiver = CommandReceiver(cfg.command_ip, cfg.command_port, enabled=cfg.command_enabled)
-    annotator = Annotator(cfg)
+    frame_hub = FrameHub(
+        quality=cfg.mjpeg_quality,
+        max_fps=cfg.mjpeg_max_fps,
+        max_width=cfg.mjpeg_max_width,
+    )
+    mjpeg_server = MjpegServer(
+        frame_hub,
+        host=cfg.mjpeg_host,
+        port=cfg.mjpeg_port,
+        path=cfg.mjpeg_path,
+    ) if cfg.mjpeg_enabled else None
+    if mjpeg_server is not None:
+        mjpeg_server.start()
+
+    video_source = None
+    udp_publisher = None
+    command_receiver = None
     writer = None
 
     try:
+        video_source = VideoSource(cfg.source)
+        tracker = TrackerRunner(cfg)
+        target_manager = TargetManager(cfg)
+        udp_publisher = UdpPublisher(cfg.udp_ip, cfg.udp_port)
+        command_receiver = CommandReceiver(cfg.command_ip, cfg.command_port, enabled=cfg.command_enabled)
+        annotator = Annotator(cfg)
         while True:
             packet = video_source.read()
             if packet is None:
@@ -65,13 +96,19 @@ def main() -> int:
             )
             udp_publisher.publish(current_target, scene)
 
-            if cfg.show or cfg.save_video:
+            if cfg.show or cfg.save_video or cfg.mjpeg_enabled:
                 annotated = annotator.annotate(
                     frame=frame,
                     tracks=tracks,
                     current_target=current_target,
                     locked_track_id=target_manager.locked_track_id,
                 )
+                if cfg.mjpeg_enabled:
+                    frame_hub.update_bgr(
+                        annotated,
+                        frame_id=packet.frame_id,
+                        timestamp=packet.timestamp,
+                    )
                 if cfg.show:
                     cv2.imshow(cfg.window_name, annotated)
                     key = cv2.waitKey(1) & 0xFF
@@ -83,9 +120,14 @@ def main() -> int:
                         writer = build_video_writer(cfg.save_path, fps, image_width, image_height)
                     writer.write(annotated)
     finally:
-        video_source.release()
-        udp_publisher.close()
-        command_receiver.close()
+        if video_source is not None:
+            video_source.release()
+        if udp_publisher is not None:
+            udp_publisher.close()
+        if command_receiver is not None:
+            command_receiver.close()
+        if mjpeg_server is not None:
+            mjpeg_server.stop()
         if writer is not None:
             writer.release()
         cv2.destroyAllWindows()

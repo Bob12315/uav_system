@@ -1,0 +1,43 @@
+runtime:
+  yolo_udp_ip: "0.0.0.0"
+  yolo_udp_port: 5005
+  loop_hz: 20.0
+  perception_timeout_sec: 1.0
+  print_rate_hz: 2.0
+  require_gimbal_feedback: true
+  run_seconds: null
+  log_level: INFO
+
+services:
+  ui_enabled: false
+  connect_telemetry: false
+  start_yolo_udp: true
+
+web_ui:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8000
+  yolo_mjpeg_url: "http://uav-yolo:8010/video.mjpeg"
+
+blackbox:
+  enabled: true
+  output_dir: runtime/logs/blackbox
+  sample_hz: 20
+  flush_every: 20
+  rotate_mb: 100
+  keep_files: 20
+  include_perception: true
+  include_drone: true
+  include_gimbal: true
+  include_fused: true
+  include_commands: true
+  include_events: true
+
+mission:
+  name: visual_tracking
+
+executor:
+  body_frame: 8
+  gimbal_roll_deg: 0.0
+  log_commands: true
+  send_commands: false

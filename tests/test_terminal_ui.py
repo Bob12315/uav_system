@@ -61,3 +61,9 @@ def test_complete_mission_switch_command() -> None:
     result = complete_command_input("mission switch resc", len("mission switch resc"))
 
     assert result.buffer == "mission switch rescue_competition"
+
+
+def test_complete_payload_related_manual_command() -> None:
+    result = complete_command_input("set_rel", len("set_rel"))
+
+    assert result.buffer == "set_relay "

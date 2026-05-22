@@ -169,6 +169,10 @@ class AppRuntimeConfig:
     require_gimbal_feedback: bool
     log_level: str
     ui_enabled: bool
+    web_ui_enabled: bool
+    web_host: str
+    web_port: int
+    yolo_mjpeg_url: str
     connect_telemetry: bool
     start_yolo_udp: bool
     run_seconds: float | None
@@ -272,6 +276,31 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ui", dest="ui_enabled", action="store_true", default=None)
     parser.add_argument("--no-ui", dest="ui_enabled", action="store_false")
     parser.add_argument(
+        "--web-ui",
+        dest="web_ui_enabled",
+        action="store_true",
+        default=None,
+        help="Start browser Web UI at --web-host/--web-port.",
+    )
+    parser.add_argument(
+        "--no-web-ui",
+        dest="web_ui_enabled",
+        action="store_false",
+        help="Disable browser Web UI.",
+    )
+    parser.add_argument("--web-host", default=None, help="Web UI listen host; defaults to 127.0.0.1.")
+    parser.add_argument("--web-port", type=int, default=None, help="Web UI listen port; defaults to 8000.")
+    parser.add_argument(
+        "--no-terminal-ui",
+        action="store_true",
+        help="Disable legacy terminal UI when using another interface.",
+    )
+    parser.add_argument(
+        "--yolo-mjpeg-url",
+        default=None,
+        help="YOLO MJPEG upstream URL proxied by the Web UI.",
+    )
+    parser.add_argument(
         "--run-seconds",
         type=float,
         help="Stop automatically after this many seconds; useful for smoke tests.",
@@ -354,6 +383,13 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
     )
     if args.ui_enabled is not None:
         ui_enabled = bool(args.ui_enabled)
+    if args.no_terminal_ui:
+        ui_enabled = False
+
+    web_data = _section(app_data, "web_ui")
+    web_ui_enabled = _cfg_bool(web_data, "enabled", True, "web_ui")
+    if args.web_ui_enabled is not None:
+        web_ui_enabled = bool(args.web_ui_enabled)
 
     runtime_cfg = AppRuntimeConfig(
         yolo_udp_ip=args.yolo_udp_ip or str(runtime_data.get("yolo_udp_ip", "0.0.0.0")),
@@ -380,6 +416,12 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
         ),
         log_level=args.log_level or str(runtime_data.get("log_level", "INFO")),
         ui_enabled=ui_enabled,
+        web_ui_enabled=web_ui_enabled,
+        web_host=args.web_host or str(web_data.get("host", "127.0.0.1")),
+        web_port=args.web_port if args.web_port is not None else int(web_data.get("port", 8000)),
+        yolo_mjpeg_url=args.yolo_mjpeg_url or str(
+            web_data.get("yolo_mjpeg_url", "http://127.0.0.1:8010/video.mjpeg")
+        ),
         connect_telemetry=connect_telemetry,
         start_yolo_udp=(
             False
@@ -510,7 +552,7 @@ def _build_blackbox_config(data: dict[str, Any], args: argparse.Namespace) -> Bl
     if args.blackbox_enabled is not None:
         enabled = bool(args.blackbox_enabled)
 
-    output_dir = str(data.get("output_dir", "logs/blackbox"))
+    output_dir = str(data.get("output_dir", "runtime/logs/blackbox"))
     if args.blackbox_output_dir:
         output_dir = args.blackbox_output_dir
     output_path = Path(output_dir).expanduser()
@@ -1040,7 +1082,13 @@ def _load_legacy_app_config(args: argparse.Namespace) -> AppConfig:
             if args.require_gimbal_feedback is not None
             else control_cfg.runtime.require_gimbal_feedback,
             log_level=args.log_level or control_cfg.runtime.log_level,
-            ui_enabled=telemetry_cfg.ui_enabled if args.ui_enabled is None else args.ui_enabled,
+            ui_enabled=False
+            if args.no_terminal_ui
+            else (telemetry_cfg.ui_enabled if args.ui_enabled is None else args.ui_enabled),
+            web_ui_enabled=True if args.web_ui_enabled is None else bool(args.web_ui_enabled),
+            web_host=args.web_host or "127.0.0.1",
+            web_port=args.web_port if args.web_port is not None else 8000,
+            yolo_mjpeg_url=args.yolo_mjpeg_url or "http://127.0.0.1:8010/video.mjpeg",
             connect_telemetry=bool(args.connect_telemetry or args.start_auto_control),
             start_yolo_udp=not args.no_yolo_udp,
             run_seconds=args.run_seconds,

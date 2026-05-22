@@ -32,6 +32,13 @@ class AppConfig:
     command_ip: str
     command_port: int
     window_name: str
+    mjpeg_enabled: bool
+    mjpeg_host: str
+    mjpeg_port: int
+    mjpeg_path: str
+    mjpeg_quality: int
+    mjpeg_max_fps: float
+    mjpeg_max_width: int
 
 
 def _str_to_bool(value: str | bool) -> bool:
@@ -70,28 +77,39 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--command-ip")
     parser.add_argument("--command-port", type=int)
     parser.add_argument("--window-name")
+    parser.add_argument("--mjpeg-enabled", type=_str_to_bool)
+    parser.add_argument("--mjpeg-host")
+    parser.add_argument("--mjpeg-port", type=int)
+    parser.add_argument("--mjpeg-path")
+    parser.add_argument("--mjpeg-quality", type=int)
+    parser.add_argument("--mjpeg-max-fps", type=float)
+    parser.add_argument("--mjpeg-max-width", type=int)
     return parser
 
 
-def _load_yaml_config(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as handle:
+def _load_yaml_config(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
     if not isinstance(data, dict):
         raise ValueError("config yaml must be a mapping")
     return data
 
 
-def _expand_user_path(value: Any) -> str:
+def _expand_user_path(value: Any, *, base_dir: Path | None = None) -> str:
     text = str(value)
     if text.startswith("~"):
         return str(Path(text).expanduser())
+    path = Path(text)
+    if base_dir is not None and not path.is_absolute():
+        return str((base_dir / path).resolve())
     return text
 
 
 def load_config() -> AppConfig:
     parser = build_arg_parser()
     args = parser.parse_args()
-    yaml_config = _load_yaml_config(args.config)
+    config_path = Path(args.config).expanduser().resolve()
+    yaml_config = _load_yaml_config(config_path)
 
     merged = dict(yaml_config)
     for key, value in vars(args).items():
@@ -101,7 +119,7 @@ def load_config() -> AppConfig:
             merged[key.replace("-", "_")] = value
 
     return AppConfig(
-        model_path=_expand_user_path(merged["model_path"]),
+        model_path=_expand_user_path(merged["model_path"], base_dir=config_path.parent),
         source=_expand_user_path(merged["source"]),
         img_size=int(merged["img_size"]),
         conf_thres=float(merged["conf_thres"]),
@@ -123,4 +141,11 @@ def load_config() -> AppConfig:
         command_ip=str(merged.get("command_ip", "0.0.0.0")),
         command_port=int(merged.get("command_port", 5006)),
         window_name=str(merged.get("window_name", "YOLO Tracking")),
+        mjpeg_enabled=bool(merged.get("mjpeg_enabled", True)),
+        mjpeg_host=str(merged.get("mjpeg_host", "127.0.0.1")),
+        mjpeg_port=int(merged.get("mjpeg_port", 8010)),
+        mjpeg_path=str(merged.get("mjpeg_path", "/video.mjpeg")),
+        mjpeg_quality=int(merged.get("mjpeg_quality", 75)),
+        mjpeg_max_fps=float(merged.get("mjpeg_max_fps", 15.0)),
+        mjpeg_max_width=int(merged.get("mjpeg_max_width", 1280)),
     )

@@ -85,6 +85,9 @@ def _build_completion_candidates() -> tuple[str, ...]:
         "roi_none ",
         "gimbal_manager_configure",
         "gimbal_manager_configure ",
+        "set_servo ",
+        "set_relay ",
+        "release_payload ",
         "set_message_interval ",
         "message_interval ",
         "body_vel ",
@@ -124,6 +127,8 @@ def _build_completion_candidates() -> tuple[str, ...]:
         candidates.add(f"local_pos {frame}")
     for yaw_option in ("cw", "ccw", "shortest", "absolute", "relative"):
         candidates.add(f"condition_yaw {yaw_option}")
+    for relay_state in ("on", "off"):
+        candidates.add(f"set_relay 0 {relay_state}")
     for message in _MESSAGE_NAMES:
         candidates.add(f"set_message_interval {message} ")
         candidates.add(f"message_interval {message} ")

@@ -26,6 +26,9 @@ _MANUAL_COMMANDS = {
     "set_roi_location",
     "roi_none",
     "gimbal_manager_configure",
+    "set_servo",
+    "set_relay",
+    "release_payload",
     "set_message_interval",
     "message_interval",
     "body_vel",
@@ -200,7 +203,7 @@ def _dispatch_mission_command(
             return CommandResult(False, "mission switching is not available in this UI")
         return mission_command_handler([])
     action = parts[1].lower()
-    if action not in {"list", "ls", "switch", "select", "use", "start", "reset", "current", "status"}:
+    if action not in {"list", "ls", "switch", "select", "use", "start", "reset", "current", "status", "stage"}:
         return None
     if mission_command_handler is None:
         return CommandResult(False, "mission switching is not available in this UI")

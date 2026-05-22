@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import socket
 
-from models import CommandMessage
+try:
+    from models import CommandMessage
+except ImportError:
+    from yolo_app.models import CommandMessage
 
 
 class CommandReceiver:
@@ -22,6 +25,12 @@ class CommandReceiver:
         self.sock: socket.socket | None = None
         if enabled:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if hasattr(socket, "SO_REUSEPORT"):
+                try:
+                    self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                except OSError:
+                    pass
             self.sock.bind((ip, port))
             self.sock.setblocking(False)
 

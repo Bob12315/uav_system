@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UAV Ground Station</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-main">UAV</span>
+      <span class="brand-sub">Ground Station</span>
+    </div>
+    <nav class="main-nav">
+      <button class="nav-item active" data-page="control" data-i18n="navControl">实时控制</button>
+      <button class="nav-item" data-page="mission-config" data-i18n="navMissionConfig">飞行模式参数</button>
+      <button class="nav-item" data-page="system-config" data-i18n="navSystemConfig">系统参数</button>
+    </nav>
+  </aside>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="status-strip">
+        <span class="pill" id="source">来源 UNKNOWN</span>
+        <span class="pill" id="link">链路未连接</span>
+        <span class="pill" id="mode">模式 UNKNOWN</span>
+        <span class="pill" id="armed">未解锁</span>
+        <span class="pill" id="battery">电量 --</span>
+        <span class="pill warn" id="send">发送 OFF</span>
+        <span class="pill warn" id="yolo-pill">YOLO OFF</span>
+      </div>
+      <button class="lang-toggle" id="lang-toggle" type="button">English</button>
+    </header>
+
+    <main class="page-host">
+      <section class="page active" id="page-control">
+        <div class="control-layout">
+          <section class="panel control-panel">
+            <div class="panel-title" data-i18n="controlActions">控制操作</div>
+
+            <div class="group">
+              <h2 data-i18n="services">服务</h2>
+              <button id="start-yolo" type="button" data-i18n="startYolo">启动 YOLO</button>
+              <button id="stop-yolo" type="button" data-i18n="stopYolo">停止 YOLO</button>
+              <div class="service-status" id="yolo-status">YOLO 未运行</div>
+            </div>
+
+            <div class="group">
+              <h2 data-i18n="mission">任务</h2>
+              <select id="mission-select"></select>
+              <button id="mission-switch" type="button" data-i18n="switchMission">切换任务</button>
+              <button data-command="mission start" data-danger="true" data-i18n="start">开始</button>
+              <button data-command="mission reset" data-i18n="reset">重置</button>
+              <button data-command="mission current" data-i18n="current">当前任务</button>
+            </div>
+
+            <div class="group">
+              <h2 data-i18n="stage">阶段</h2>
+              <button data-command="stage auto" data-i18n="auto">自动阶段</button>
+              <div id="stage-buttons" class="stack"></div>
+            </div>
+
+            <div class="group">
+              <h2 data-i18n="flightCommands">基础命令</h2>
+              <div class="inline">
+                <select id="mode-select">
+                  <option>GUIDED</option>
+                  <option>LOITER</option>
+                  <option>BRAKE</option>
+                  <option>LAND</option>
+                </select>
+                <button id="mode-apply" type="button" data-i18n="applyMode">切换模式</button>
+              </div>
+              <div class="inline">
+                <input id="takeoff-alt" type="number" min="1" step="1" value="5">
+                <button id="takeoff" type="button" data-i18n="takeoff">起飞</button>
+              </div>
+              <button data-command="arm" data-danger="true" data-i18n="arm">解锁</button>
+              <button data-command="disarm" data-danger="true" data-i18n="disarm">上锁</button>
+              <button data-command="land" data-danger="true" data-i18n="land">降落</button>
+              <button data-command="stop" data-i18n="stop">停止</button>
+            </div>
+
+            <div class="group">
+              <h2 data-i18n="control">控制</h2>
+              <button class="switch danger-switch" id="toggle-send" type="button">
+                <span data-i18n="sendCommands">控制发送</span><strong>OFF</strong>
+              </button>
+              <button class="switch" id="toggle-gimbal" type="button">
+                <span data-i18n="gimbal">云台</span><strong>OFF</strong>
+              </button>
+              <button class="switch" id="toggle-body" type="button">
+                <span data-i18n="body">机体</span><strong>OFF</strong>
+              </button>
+              <button class="switch" id="toggle-approach" type="button">
+                <span data-i18n="approach">接近</span><strong>OFF</strong>
+              </button>
+            </div>
+
+            <div class="group">
+              <h2 data-i18n="target">目标</h2>
+              <button data-command="target prev" data-i18n="prev">上一个</button>
+              <button data-command="target next" data-i18n="next">下一个</button>
+              <button data-command="target unlock" data-i18n="unlock">解锁目标</button>
+            </div>
+          </section>
+
+          <section class="center-stack">
+            <div class="video-panel">
+              <img id="video" src="/video/yolo.mjpeg" alt="YOLO stream">
+            </div>
+            <div class="panel drone-command-panel">
+              <div class="panel-title" data-i18n="droneCommands">发往无人机的命令</div>
+              <ul class="drone-command-list" id="drone-command-list"></ul>
+            </div>
+          </section>
+
+          <section class="panel status-panel">
+            <div class="panel-title" data-i18n="status">状态</div>
+            <div class="status-grid" id="status-grid"></div>
+            <div class="panel-title compact" data-i18n="recentResult">最近结果</div>
+            <div class="result-box" id="result">就绪</div>
+            <ul class="mini-history" id="history"></ul>
+          </section>
+        </div>
+      </section>
+
+      <section class="page" id="page-mission-config">
+        <div class="config-layout">
+          <section class="panel config-side">
+            <div class="panel-title" data-i18n="missionConfig">飞行模式参数</div>
+            <label data-i18n="mission">任务</label>
+            <select id="mission-config-select"></select>
+            <button id="mission-config-load" type="button" data-i18n="reload">读取</button>
+            <button id="mission-config-save" type="button" data-i18n="save">保存</button>
+            <button id="mission-config-apply" type="button" data-i18n="apply">应用运行时</button>
+            <div class="path" id="mission-config-path">--</div>
+          </section>
+          <section class="editor-panel">
+            <textarea id="mission-config-yaml" spellcheck="false"></textarea>
+          </section>
+        </div>
+      </section>
+
+      <section class="page" id="page-system-config">
+        <div class="config-layout">
+          <section class="panel config-side">
+            <div class="panel-title" data-i18n="systemConfig">系统参数</div>
+            <label data-i18n="configFile">配置文件</label>
+            <select id="system-config-select">
+              <option value="app">config/app.yaml</option>
+              <option value="telemetry">config/telemetry.yaml</option>
+              <option value="yolo">yolo_app/config.yaml</option>
+            </select>
+            <button id="system-config-load" type="button" data-i18n="reload">读取</button>
+            <button id="system-config-save" type="button" data-i18n="save">保存</button>
+            <div class="hint" data-i18n="restartHint">系统参数保存后通常需要重启 app 或 YOLO 才会生效。</div>
+            <div class="path" id="system-config-path">--</div>
+          </section>
+          <section class="editor-panel">
+            <textarea id="system-config-yaml" spellcheck="false"></textarea>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer class="console">
+      <form id="command-form">
+        <input id="command-input" autocomplete="off" data-i18n-placeholder="commandPlaceholder" placeholder="输入命令后回车，Tab 补全">
+        <button type="submit" data-i18n="sendCommand">发送</button>
+      </form>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
