@@ -6,6 +6,8 @@ services:
     image: uav-project-control:local
     container_name: uav-control
     init: true
+    security_opt:
+      - apparmor=unconfined
     environment:
       UAV_YOLO_START_COMMAND: "echo 'YOLO runs as the uav-yolo compose service; use docker compose up uav-yolo'"
     volumes:
@@ -22,7 +24,7 @@ services:
       - app.main
       - --app-config
       - config/app.docker.yaml
-    restart: unless-stopped
+    restart: "no"
 
   uav-yolo:
     build:
@@ -31,6 +33,8 @@ services:
     image: uav-project-yolo:local
     container_name: uav-yolo
     init: true
+    security_opt:
+      - apparmor=unconfined
     profiles:
       - yolo
     depends_on:
@@ -39,7 +43,7 @@ services:
       - ./runtime:/app/runtime
       - ./data/models:/app/data/models:ro
       # Enable this for USB camera input, then set source: /dev/video0.
-      # - /dev/video0:/dev/video0
+      - /dev/video0:/dev/video0
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -53,7 +57,7 @@ services:
       - yolo_app.main
       - --config
       - yolo_app/config.docker.yaml
-    restart: unless-stopped
+    restart: "no"
 
   # Optional SITL helper shape. Keep disabled until a simulator command is chosen.
   # ardupilot-sitl:
