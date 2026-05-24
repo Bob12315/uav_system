@@ -27,7 +27,7 @@ runtime:
 ## 2. app dry-run，不连接飞控
 
 ```bash
-conda activate uav-control
+conda activate app
 cd ~/uav_project/src
 python -m app.main --send-commands false
 ```
