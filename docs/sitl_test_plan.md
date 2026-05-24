@@ -43,7 +43,7 @@ python main.py
 窗口 2：
 
 ```bash
-conda activate uav-control
+conda activate app
 cd ~/uav_project/src
 python -m app.main --connect-telemetry --send-commands false
 ```

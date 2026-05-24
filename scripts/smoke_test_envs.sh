@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-CONTROL_ENV="${CONTROL_ENV:-uav-control}"
+CONTROL_ENV="${CONTROL_ENV:-app}"
 YOLO_ENV="${YOLO_ENV:-yolo}"
 
 if ! command -v conda >/dev/null 2>&1; then

@@ -51,19 +51,20 @@ docs/             架构、接口、运行、安全和开发规则
 
 ## 安装环境
 
-建议使用两个 conda 环境：控制环境和 YOLO 环境。
+建议使用两个 conda 环境：`app` 环境和 `yolo` 环境。用户先自行安装 Miniconda/Anaconda，并自行创建两个环境；本仓库当前只提供 app 环境的一键依赖安装脚本。
 
 ```bash
-conda create -n uav-control python=3.10 -y
-conda activate uav-control
-pip install pymavlink pyyaml pytest
+conda create -n app python=3.10 -y
+conda activate app
+bash scripts/install_app_env.sh
 ```
 
 ```bash
-conda create -n yolo python=3.11 -y
+conda create -n yolo python=3.10 -y
 conda activate yolo
-pip install ultralytics opencv-python pyyaml
 ```
+
+`yolo` 环境依赖安装脚本暂不提供，后续按 CUDA、模型和相机输入方式单独整理。
 
 如果使用 GPU，请按本机 CUDA 版本安装合适的 PyTorch。模型文件建议放在：
 
@@ -90,7 +91,7 @@ YOLO 默认通过 UDP JSON 输出主目标。控制端默认监听 `0.0.0.0:5005
 ### 2. app dry-run，不连飞控
 
 ```bash
-conda activate uav-control
+conda activate app
 cd ~/uav_project/src
 python -m app.main --send-commands false
 ```
