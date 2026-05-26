@@ -36,8 +36,9 @@ python -m app.main --connect-telemetry --no-yolo-udp --send-commands false --run
 
 ```bash
 conda activate yolo
-cd ~/uav_project/src/yolo_app
-python main.py
+cd ~/uav_project/uav_system-platform-rk3588/yolo_app
+DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 \
+DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus python main.py
 ```
 
 窗口 2：

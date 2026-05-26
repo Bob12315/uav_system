@@ -171,5 +171,5 @@ python -m telemetry_link.main --help
 - 禁止 mission stage controller 直接调用 `LinkManager`。
 - 禁止绕过 `CommandShaper`。
 - 禁止默认打开真实控制发送。
-- 禁止把 `.pt`、日志、`__pycache__` 作为功能变更提交。
-- 禁止用单元测试依赖真实飞控、相机、GPU。
+- 禁止把 `.rknn`、日志、`__pycache__` 作为功能变更提交。
+- 禁止用单元测试依赖真实飞控、相机、NPU。

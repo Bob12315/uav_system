@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
-from yolo_app.rknn_detector import Detection, letterbox, postprocess
+from yolo_app.rknn_detector import Detection, RknnDetector, letterbox, postprocess
 from yolo_app.tracker_runner import _IoUTracker
 
 
@@ -54,3 +55,8 @@ def test_rknn_iou_tracker_keeps_visible_detection_id() -> None:
     second_tracks = tracker.update([shifted])
 
     assert first_tracks[0].track_id == second_tracks[0].track_id
+
+
+def test_detector_rejects_non_rknn_models_before_runtime_loading() -> None:
+    with pytest.raises(ValueError, match=r"requires an \.rknn model"):
+        RknnDetector("model.onnx", 0.25, 0.45, [])

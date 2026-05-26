@@ -21,10 +21,10 @@ echo "Checking YOLO environment '${YOLO_ENV}'..."
 conda run -n "${YOLO_ENV}" bash -lc "cd '${REPO_ROOT}/yolo_app' && python main.py --help >/dev/null"
 conda run -n "${YOLO_ENV}" python - <<'PY'
 import cv2
-import ultralytics
+from rknnlite.api import RKNNLite
 
 print("opencv", cv2.__version__)
-print("ultralytics", ultralytics.__version__)
+print("rknnlite", RKNNLite)
 PY
 
 echo

@@ -12,11 +12,8 @@ import yaml
 class AppConfig:
     model_path: str
     source: str
-    img_size: int
     conf_thres: float
     iou_thres: float
-    tracker: str
-    device: str
     classes: list[int]
     udp_ip: str
     udp_port: int
@@ -57,11 +54,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default=str(Path(__file__).with_name("config.yaml")))
     parser.add_argument("--model-path")
     parser.add_argument("--source")
-    parser.add_argument("--img-size", type=int)
     parser.add_argument("--conf-thres", type=float)
     parser.add_argument("--iou-thres", type=float)
-    parser.add_argument("--tracker")
-    parser.add_argument("--device")
     parser.add_argument("--classes", nargs="*", type=int)
     parser.add_argument("--udp-ip")
     parser.add_argument("--udp-port", type=int)
@@ -117,11 +111,8 @@ def load_config() -> AppConfig:
     return AppConfig(
         model_path=_expand_user_path(merged["model_path"]),
         source=_expand_user_path(merged["source"]),
-        img_size=int(merged["img_size"]),
         conf_thres=float(merged["conf_thres"]),
         iou_thres=float(merged["iou_thres"]),
-        tracker=str(merged["tracker"]),
-        device=str(merged.get("device", "")),
         classes=list(merged.get("classes", [])),
         udp_ip=str(merged["udp_ip"]),
         udp_port=int(merged["udp_port"]),

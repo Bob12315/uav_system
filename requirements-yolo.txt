@@ -1,7 +1,4 @@
-ultralytics
+rknn-toolkit-lite2==2.3.2
 opencv-python
 pyyaml
 numpy
-
-# GPU users may need to install a PyTorch build that matches their CUDA driver.
-# Keep that step outside this file so CPU-only installs still remain simple.

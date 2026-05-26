@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -32,6 +33,8 @@ class RknnDetector:
         classes: list[int],
         class_names: tuple[str, ...] = CLASS_NAMES,
     ) -> None:
+        if Path(model_path).suffix.lower() != ".rknn":
+            raise ValueError(f"RK3588 detector requires an .rknn model: {model_path}")
         from rknnlite.api import RKNNLite
 
         self.conf_thres = conf_thres

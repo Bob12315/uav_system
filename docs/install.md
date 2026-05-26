@@ -44,16 +44,10 @@ conda create -n yolo python=3.10 -y
 conda activate yolo
 ```
 
-YOLO 环境依赖安装脚本暂不提供，后续按 RK3588 的推理方式、模型格式和硬件加速方案单独整理。
-
-如果使用 GPU，请按本机 CUDA 版本安装合适的 PyTorch。可以先确认：
+在 NanoPC-T6 上安装与 RKNN Runtime `2.3.2` 相配的依赖：
 
 ```bash
-python - <<'PY'
-import torch
-print(torch.__version__)
-print(torch.cuda.is_available())
-PY
+pip install rknn-toolkit-lite2==2.3.2 opencv-python pyyaml numpy
 ```
 
 ## 模型文件
@@ -61,16 +55,17 @@ PY
 建议路径：
 
 ```text
-~/models/best.pt
+~/rk3588_yolo/rknn_model_zoo/examples/yolo11/model/best-int8-rk3588.rknn
 ```
 
 然后在 `yolo_app/config.yaml` 中配置：
 
 ```yaml
-model_path: "~/models/best.pt"
+model_path: "~/rk3588_yolo/rknn_model_zoo/examples/yolo11/model/best-int8-rk3588.rknn"
 ```
 
-不建议把 `.pt` 模型提交到 Git。
+模型为 Rockchip 优化的 INT8 RKNN 文件，输入为 RGB uint8 `(1, 640, 640, 3)`，固定使用
+`NPU_CORE_0_1_2`。不建议把 `.rknn` 模型提交到 Git。
 
 ## 可选依赖
 
@@ -90,6 +85,7 @@ YOLO 环境：
 
 ```bash
 conda activate yolo
-cd ~/uav_project/src/yolo_app
-python main.py
+cd ~/uav_project/uav_system-platform-rk3588/yolo_app
+DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 \
+DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus python main.py
 ```

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 try:
     from .config import AppConfig
@@ -14,79 +13,23 @@ except ImportError:
 
 
 class TrackerRunner:
-    """Expose detector results as project-level tracks for either supported backend."""
+    """Expose RK3588 RKNN detections as project-level tracks."""
 
     def __init__(self, cfg: AppConfig) -> None:
-        self.cfg = cfg
-        self.rknn_detector: RknnDetector | None = None
-        self.model = None
-        self.iou_tracker: _IoUTracker | None = None
-
-        if Path(cfg.model_path).suffix.lower() == ".rknn":
-            self.rknn_detector = RknnDetector(
-                model_path=cfg.model_path,
-                conf_thres=cfg.conf_thres,
-                iou_thres=cfg.iou_thres,
-                classes=cfg.classes,
-                class_names=tuple(cfg.class_names),
-            )
-            self.iou_tracker = _IoUTracker(max_lost_frames=cfg.max_lost_frames)
-        else:
-            from ultralytics import YOLO
-
-            self.model = YOLO(cfg.model_path)
+        self.detector = RknnDetector(
+            model_path=cfg.model_path,
+            conf_thres=cfg.conf_thres,
+            iou_thres=cfg.iou_thres,
+            classes=cfg.classes,
+            class_names=tuple(cfg.class_names),
+        )
+        self.iou_tracker = _IoUTracker(max_lost_frames=cfg.max_lost_frames)
 
     def run(self, frame) -> list[Track]:
-        if self.rknn_detector is not None and self.iou_tracker is not None:
-            return self.iou_tracker.update(self.rknn_detector.detect(frame))
-        return self._run_ultralytics(frame)
+        return self.iou_tracker.update(self.detector.detect(frame))
 
     def release(self) -> None:
-        if self.rknn_detector is not None:
-            self.rknn_detector.release()
-
-    def _run_ultralytics(self, frame) -> list[Track]:
-        results = self.model.track(
-            source=frame,
-            persist=True,
-            tracker=self.cfg.tracker,
-            conf=self.cfg.conf_thres,
-            iou=self.cfg.iou_thres,
-            imgsz=self.cfg.img_size,
-            device=self.cfg.device if self.cfg.device else None,
-            classes=self.cfg.classes or None,
-            verbose=False,
-        )
-        if not results:
-            return []
-
-        result = results[0]
-        boxes = result.boxes
-        if boxes is None or boxes.id is None or boxes.xyxy is None:
-            return []
-
-        names = result.names or {}
-        xyxy_list = boxes.xyxy.cpu().tolist()
-        id_list = boxes.id.int().cpu().tolist()
-        cls_list = boxes.cls.int().cpu().tolist() if boxes.cls is not None else [0] * len(id_list)
-        conf_list = boxes.conf.cpu().tolist() if boxes.conf is not None else [0.0] * len(id_list)
-
-        tracks: list[Track] = []
-        for xyxy, track_id, class_id, confidence in zip(xyxy_list, id_list, cls_list, conf_list):
-            x1, y1, x2, y2 = [float(value) for value in xyxy]
-            tracks.append(
-                Track(
-                    track_id=int(track_id),
-                    class_id=int(class_id),
-                    class_name=str(names.get(int(class_id), int(class_id))),
-                    confidence=float(confidence),
-                    x1=x1,
-                    y1=y1,
-                    x2=x2,
-                    y2=y2,
-                )
-            )
-        return tracks
+        self.detector.release()
 
 
 @dataclass(slots=True)

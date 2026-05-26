@@ -1,6 +1,6 @@
 # 运行手册
 
-以下命令默认工作目录为：
+控制程序命令默认工作目录为：
 
 ```bash
 cd ~/uav_project/src
@@ -8,12 +8,13 @@ cd ~/uav_project/src
 
 ## 1. 启动 YOLO
 
-YOLO 建议在独立 conda 环境中运行：
+YOLO 在 RK3588 板载桌面会话的独立 conda 环境中运行：
 
 ```bash
 conda activate yolo
-cd ~/uav_project/src/yolo_app
-python main.py
+cd ~/uav_project/uav_system-platform-rk3588/yolo_app
+DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 \
+DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus python main.py
 ```
 
 确认 `yolo_app/config.yaml` 中 UDP 输出端口与 `config/app.yaml` 一致。控制端默认监听：

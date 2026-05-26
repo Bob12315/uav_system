@@ -1,4 +1,4 @@
-# RK3588 上验证过的 Rockchip YOLO11 INT8 模型；.pt 模型仍可通过命令行覆盖使用
+# RK3588 上验证过的 Rockchip YOLO11 INT8 模型
 model_path: "~/rk3588_yolo/rknn_model_zoo/examples/yolo11/model/best-int8-rk3588.rknn"
 
 # 视频输入源：
@@ -15,20 +15,11 @@ camera_fps: 30
 camera_fourcc: "MJPG"
 latest_frame: true
 
-# YOLO 推理尺寸，常用 640；数值越大通常越准，但推理耗时也会增加
-img_size: 640
-
 # 检测置信度阈值，越高越严格，误检更少但漏检可能变多
 conf_thres: 0.25
 
 # NMS 的 IOU 阈值，用于控制重叠候选框的抑制
 iou_thres: 0.45
-
-# .pt 后端使用的官方 tracking 配置；RKNN 后端内部维护短时 track_id
-tracker: "bytetrack.yaml"
-
-# .pt 后端推理设备；RKNN 后端固定使用 NPU_CORE_0_1_2
-device: ""
 
 # RKNN 模型类别名称
 class_names: ["Target", "bucket", "class_2"]

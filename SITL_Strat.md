@@ -8,7 +8,7 @@ gz topic -t /world/iris_runway/model/iris_with_gimbal/model/gimbal/link/pitch_li
 
 conda activate yolo
 
-python3 ~/uav_project/src/yolo_app/main.py
+DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus python3 ~/uav_project/uav_system-platform-rk3588/yolo_app/main.py
 
 cd ~/uav_project/src/
 python3 -m app.main 

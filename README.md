@@ -2,7 +2,7 @@
 
 这是一个面向无人机视觉跟踪任务的 Python 工程。系统由 YOLO 感知进程、MAVLink 遥测链路、融合层、mission/stage 控制层和总控编排层组成，当前主要支持：
 
-- YOLO + ByteTrack 目标检测与主目标选择。
+- RK3588 NPU 上的 RKNN INT8 YOLO 目标检测与主目标选择。
 - MAVLink2 遥测接入、状态缓存、动作命令和连续控制命令发送。
 - 感知目标与飞控/云台状态融合。
 - 斜视接近 `APPROACH_TRACK`。
@@ -14,7 +14,7 @@
 
 ```text
 yolo_app/                    telemetry_link/
-YOLO + ByteTrack             MAVLink2 + state cache + command sender
+RKNN INT8 YOLO (RK3588 NPU) MAVLink2 + state cache + command sender
         | UDP JSON                    |
         v                             v
 fusion/ ------------------------------------------------+
@@ -42,7 +42,7 @@ app/              系统入口、服务编排、任务状态机、健康检查
 missions/         mission、stage controller 和通用控制命令出口
 fusion/           感知与遥测融合
 telemetry_link/   MAVLink2 通讯、状态缓存、命令队列和发送
-yolo_app/         YOLO + ByteTrack 感知进程
+yolo_app/         RK3588 RKNN INT8 感知进程
 uav_ui/           终端 UI 与人工命令分发
 config/           新架构配置入口
 tests/            单元测试
@@ -64,15 +64,13 @@ conda create -n yolo python=3.10 -y
 conda activate yolo
 ```
 
-`yolo` 环境依赖安装脚本暂不提供，后续按 RK3588 的推理方式、模型格式和硬件加速方案单独整理。
-
-如果使用 GPU，请按本机 CUDA 版本安装合适的 PyTorch。模型文件建议放在：
+`yolo` 环境需安装 OpenCV、PyYAML、NumPy 及匹配板端 Runtime 的 `rknn-toolkit-lite2==2.3.2`。模型文件路径为：
 
 ```text
-~/models/best.pt
+~/rk3588_yolo/rknn_model_zoo/examples/yolo11/model/best-int8-rk3588.rknn
 ```
 
-大型 `.pt`、日志、缓存文件不建议提交到 Git。
+大型 `.rknn`、日志、缓存文件不建议提交到 Git。
 
 更完整的安装说明见 [docs/install.md](docs/install.md)。
 
@@ -82,8 +80,9 @@ conda activate yolo
 
 ```bash
 conda activate yolo
-cd ~/uav_project/src/yolo_app
-python main.py
+cd ~/uav_project/uav_system-platform-rk3588/yolo_app
+DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 \
+DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus python main.py
 ```
 
 YOLO 默认通过 UDP JSON 输出主目标。控制端默认监听 `0.0.0.0:5005`，两边端口需要一致。
