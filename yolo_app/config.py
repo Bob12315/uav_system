@@ -32,6 +32,13 @@ class AppConfig:
     command_ip: str
     command_port: int
     window_name: str
+    class_names: list[str]
+    camera_width: int
+    camera_height: int
+    camera_fps: int
+    camera_fourcc: str
+    latest_frame: bool
+    fullscreen: bool
 
 
 def _str_to_bool(value: str | bool) -> bool:
@@ -70,6 +77,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--command-ip")
     parser.add_argument("--command-port", type=int)
     parser.add_argument("--window-name")
+    parser.add_argument("--class-names", nargs="*")
+    parser.add_argument("--camera-width", type=int)
+    parser.add_argument("--camera-height", type=int)
+    parser.add_argument("--camera-fps", type=int)
+    parser.add_argument("--camera-fourcc")
+    parser.add_argument("--latest-frame", type=_str_to_bool)
+    parser.add_argument("--fullscreen", type=_str_to_bool)
     return parser
 
 
@@ -123,4 +137,11 @@ def load_config() -> AppConfig:
         command_ip=str(merged.get("command_ip", "0.0.0.0")),
         command_port=int(merged.get("command_port", 5006)),
         window_name=str(merged.get("window_name", "YOLO Tracking")),
+        class_names=list(merged.get("class_names", ["Target", "bucket", "class_2"])),
+        camera_width=int(merged.get("camera_width", 640)),
+        camera_height=int(merged.get("camera_height", 480)),
+        camera_fps=int(merged.get("camera_fps", 30)),
+        camera_fourcc=str(merged.get("camera_fourcc", "MJPG")),
+        latest_frame=bool(merged.get("latest_frame", False)),
+        fullscreen=bool(merged.get("fullscreen", False)),
     )

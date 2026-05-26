@@ -2,11 +2,11 @@
 
 本目录只负责无人机项目中的 YOLO 感知与目标跟踪层，不包含 ROS2、飞控控制器或其他上层模块。
 
-本实现严格遵循以下原则：
+本实现遵循以下原则：
 
-- 保留官方 Ultralytics `model.track(...)` 主流程
-- 使用官方 ByteTrack 配置 `tracker="bytetrack.yaml"`
-- 不重写 ByteTrack 底层
+- 在 RK3588 板端默认使用经过验证的 RKNN INT8 NPU 模型
+- RKNN 后端使用 Rockchip 优化模型的 9 输出 DFL/NMS 后处理，并维护供业务层使用的短时 `track_id`
+- 使用 `.pt` 模型时仍保留官方 Ultralytics `model.track(...)` 与 ByteTrack 流程
 - 不引入 ROS2
 - 通过 UDP(JSON) 与后续系统通信
 - 在官方 tracking 输出外层增加目标管理、UDP 输出和调试标注
@@ -17,8 +17,8 @@
 
 ```text
 Video Source
--> Ultralytics YOLO official track(...)
--> ByteTrack official tracker
+-> RKNN INT8 detection + lightweight ID association (board default)
+   or Ultralytics YOLO official track(...) + ByteTrack (.pt fallback)
 -> Track list with track_id
 -> TargetManager
 -> UdpPublisher(JSON)
@@ -45,6 +45,7 @@ yolo_app/
   ├── config.yaml
   ├── config.py
   ├── video_source.py
+  ├── rknn_detector.py
   ├── tracker_runner.py
   ├── target_manager.py
   ├── udp_publisher.py
@@ -61,7 +62,8 @@ yolo_app/
 - `config.yaml`：默认配置文件。
 - `config.py`：加载配置文件并支持命令行覆盖。
 - `video_source.py`：统一处理 `/dev/videoX`、UDP 端口、RTSP、本地视频文件输入。
-- `tracker_runner.py`：官方 tracking 调用封装层，只负责 `model.track(...)` 和结果解析。
+- `rknn_detector.py`：RKNN Runtime 初始化、RGB NHWC batch 输入和 9 输出 DFL/NMS 后处理。
+- `tracker_runner.py`：按 `.rknn` / `.pt` 选择检测后端，并统一输出 `Track`。
 - `target_manager.py`：负责主目标自动选择、锁定、切换、丢失计数。
 - `udp_publisher.py`：按固定 JSON 协议输出当前唯一主目标。
 - `command_receiver.py`：接收简单 UDP 控制命令。
@@ -94,7 +96,16 @@ pip install ultralytics opencv-python pyyaml
 
 ### 3.2 模型准备
 
-本项目支持自定义训练模型 `.pt`。
+板端默认配置使用已转换并验证的 RKNN 模型：
+
+```text
+~/rk3588_yolo/rknn_model_zoo/examples/yolo11/model/best-int8-rk3588.rknn
+```
+
+该模型输入为 `(1, 640, 640, 3)` RGB uint8，类别为 `Target / bucket / class_2`，并在
+`NPU_CORE_0_1_2` 上运行。程序不会将其当作普通 Ultralytics 单输出模型解析。
+
+本项目仍支持自定义训练模型 `.pt`。
 
 例如：
 
@@ -136,8 +147,8 @@ model_path: "~/models/best.pt"
 程序每一帧的执行流程如下：
 
 1. `video_source.py` 读取一帧图像，产生 `frame / frame_id / timestamp`
-2. `tracker_runner.py` 调用官方 `YOLO(model_path).track(...)`
-3. 官方 ByteTrack 返回带 `track_id` 的目标
+2. `tracker_runner.py` 按模型类型调用 RKNN 或官方 `YOLO(model_path).track(...)`
+3. RKNN 检测结果关联 ID，或由 ByteTrack 返回带 `track_id` 的目标
 4. `tracker_runner.py` 将官方结果转换成统一 `Track` 列表
 5. `command_receiver.py` 读取外部命令，例如切换目标或强制锁定
 6. `target_manager.py` 根据当前 tracks 维护唯一主目标
@@ -152,6 +163,21 @@ model_path: "~/models/best.pt"
 ```bash
 cd ~/uav_project/src/yolo_app
 ```
+
+### 5.0 RK3588 板载屏幕运行
+
+默认 `config.yaml` 已设置 RKNN INT8 模型、`/dev/video41`、MJPG 640x480 和全屏显示。
+在板载 GNOME 桌面启动时使用：
+
+```bash
+DISPLAY=:0 \
+XDG_RUNTIME_DIR=/run/user/1000 \
+WAYLAND_DISPLAY=wayland-0 \
+DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+conda run -n yolo python main.py
+```
+
+画面状态栏和标准输出会显示管线 FPS 与延迟。
 
 ### 5.1 直接使用默认配置启动
 

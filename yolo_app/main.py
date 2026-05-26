@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 
 # Some conda-packaged OpenCV builds use the Qt backend but do not bundle fonts.
 # Point Qt to a common system font directory before importing cv2 to suppress warnings.
@@ -27,13 +28,27 @@ def build_video_writer(save_path: str, fps: float, width: int, height: int) -> c
 
 def main() -> int:
     cfg = load_config()
-    video_source = VideoSource(cfg.source)
+    video_source = VideoSource(
+        cfg.source,
+        camera_width=cfg.camera_width,
+        camera_height=cfg.camera_height,
+        camera_fps=cfg.camera_fps,
+        camera_fourcc=cfg.camera_fourcc,
+        latest_frame=cfg.latest_frame,
+    )
     tracker = TrackerRunner(cfg)
     target_manager = TargetManager(cfg)
     udp_publisher = UdpPublisher(cfg.udp_ip, cfg.udp_port)
     command_receiver = CommandReceiver(cfg.command_ip, cfg.command_port, enabled=cfg.command_enabled)
     annotator = Annotator(cfg)
     writer = None
+    frame_count = 0
+    start_time = time.perf_counter()
+
+    if cfg.show:
+        cv2.namedWindow(cfg.window_name, cv2.WINDOW_NORMAL)
+        if cfg.fullscreen:
+            cv2.setWindowProperty(cfg.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     try:
         while True:
@@ -45,6 +60,9 @@ def main() -> int:
             image_height, image_width = frame.shape[:2]
 
             tracks = tracker.run(frame)
+            frame_count += 1
+            fps = frame_count / max(time.perf_counter() - start_time, 1e-9)
+            latency_ms = max(0.0, (time.time() - packet.timestamp) * 1000.0)
             commands = command_receiver.poll()
             for command in commands:
                 target_manager.apply_command(command, tracks)
@@ -71,6 +89,8 @@ def main() -> int:
                     tracks=tracks,
                     current_target=current_target,
                     locked_track_id=target_manager.locked_track_id,
+                    fps=fps,
+                    latency_ms=latency_ms,
                 )
                 if cfg.show:
                     cv2.imshow(cfg.window_name, annotated)
@@ -82,13 +102,24 @@ def main() -> int:
                         fps = video_source.cap.get(cv2.CAP_PROP_FPS)
                         writer = build_video_writer(cfg.save_path, fps, image_width, image_height)
                     writer.write(annotated)
+            if frame_count == 1 or frame_count % 60 == 0:
+                print(
+                    f"frame={frame_count} fps={fps:.1f} pipeline_ms={latency_ms:.1f} tracks={len(tracks)}",
+                    flush=True,
+                )
+    except KeyboardInterrupt:
+        pass
     finally:
         video_source.release()
+        tracker.release()
         udp_publisher.close()
         command_receiver.close()
         if writer is not None:
             writer.release()
         cv2.destroyAllWindows()
+
+    elapsed = max(time.perf_counter() - start_time, 1e-9)
+    print(f"finished frames={frame_count} average_fps={frame_count / elapsed:.1f}", flush=True)
 
     return 0
 
