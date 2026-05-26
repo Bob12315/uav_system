@@ -18,3 +18,8 @@ __pycache__/
 
 logs/
 yolo_app/logs/
+
+# ArduPilot/SITL runtime artifacts.
+mav.parm
+mav.tlog
+mav.tlog.raw
