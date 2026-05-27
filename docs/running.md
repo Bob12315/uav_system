@@ -103,14 +103,87 @@ systemctl --user enable --now uav-app.service uav-yolo.service
 模板的 `WorkingDirectory` 是 `%h/uav_project`。如果代码放在其他目录，
 需要先修改 `~/.config/systemd/user/uav-*.service` 中的路径。
 
-### 2.3 日常启动与检查
+### 2.3 启动、停止和重启
 
-日常启动或重启：
+同时管理 app 与 YOLO：
 
 ```bash
+systemctl --user start uav-app.service uav-yolo.service
+systemctl --user stop uav-app.service uav-yolo.service
 systemctl --user restart uav-app.service uav-yolo.service
 systemctl --user --no-pager --full status uav-app.service uav-yolo.service
 ```
+
+只操作一个进程：
+
+```bash
+# Web UI、telemetry、mission 或控制代码变化时
+systemctl --user restart uav-app.service
+
+# YOLO、摄像头、模型或视频流代码变化时
+systemctl --user restart uav-yolo.service
+```
+
+服务已经配置为开机后自动启动。需要临时关闭自动启动，或再次恢复时使用：
+
+```bash
+systemctl --user disable --now uav-app.service uav-yolo.service
+systemctl --user enable --now uav-app.service uav-yolo.service
+```
+
+### 2.4 修改程序后加载新版本
+
+如果代码在 GitHub 的 `platform/rk3588` 分支已经提交并推送，在板端执行：
+
+```bash
+cd ~/uav_project
+git status --short --branch
+git fetch github platform/rk3588
+git merge --ff-only github/platform/rk3588
+```
+
+板端可能保留现场的 `yolo_app/config.yaml` 与 `.rknn` 模型文件。更新前应
+确认 `git status`，不要用会丢失现场配置的强制覆盖命令。
+
+普通 Python、HTML、JavaScript、CSS 或 YAML 配置修改不需要重新安装，
+重启受影响服务即可：
+
+```bash
+# 修改了 app/、web_ui/、missions/、config/ 中 app/mission/telemetry 行为
+systemctl --user restart uav-app.service
+
+# 修改了 yolo_app/、YOLO 配置、摄像头 source 或模型路径
+systemctl --user restart uav-yolo.service
+
+# 不能确定修改影响哪一端时
+systemctl --user restart uav-app.service uav-yolo.service
+```
+
+如果修改了依赖文件，更新后先安装依赖，再重启服务：
+
+```bash
+# requirements-control.txt 变化
+~/miniconda3/envs/app/bin/python -m pip install -r requirements-control.txt
+
+# RK3588 的 yolo 依赖变化时，只安装板端需要的包；
+# rknn-toolkit-lite2 版本仍需与板端模型和驱动匹配
+~/miniconda3/envs/yolo/bin/python -m pip install opencv-python pyyaml numpy
+~/miniconda3/envs/yolo/bin/python -c "import cv2, yaml; from rknnlite.api import RKNNLite"
+
+systemctl --user restart uav-app.service uav-yolo.service
+```
+
+如果修改了 `deploy/systemd/uav-app.service` 或
+`deploy/systemd/uav-yolo.service`，需要重新覆盖用户服务文件并重新加载：
+
+```bash
+cd ~/uav_project
+cp deploy/systemd/uav-app.service deploy/systemd/uav-yolo.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user restart uav-app.service uav-yolo.service
+```
+
+### 2.5 运行检查与日志
 
 检查 Web 和视频流：
 
