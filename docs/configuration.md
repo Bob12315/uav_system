@@ -18,9 +18,15 @@ runtime:
   log_level: INFO
 
 services:
-  ui_enabled: false
   connect_telemetry: false
   start_yolo_udp: true
+
+ui:
+  web_enabled: true
+  terminal_enabled: false
+  web_host: "0.0.0.0"
+  web_port: 8080
+  audit_log_path: "logs/web_ui/audit.jsonl"
 
 mission:
   name: visual_tracking
@@ -30,11 +36,20 @@ executor:
 ```
 
 - `connect_telemetry`：默认 false；命令行 `--connect-telemetry` 可打开。
-- `ui_enabled`：默认 false；命令行 `--ui` 可打开。
+- `ui.web_enabled`：是否随 app 启动网页控制台。
+- `ui.terminal_enabled`：是否启动 curses UI；命令行 `--ui` 仍可临时打开。
 - `start_yolo_udp`：是否监听 YOLO UDP。
 - `send_commands`：默认必须为 false；实发时必须显式打开。
 - `run_seconds`：自动退出秒数，适合 smoke test。
 - `mission.name`：当前运行的 mission 名称，默认 `visual_tracking`。
+
+网页上的外部进程重启按钮由 service manager 命令驱动，建议使用用户级 `systemd`：
+
+```yaml
+services_control:
+  restart_app_command: ["systemctl", "--user", "restart", "uav-app.service"]
+  restart_yolo_command: ["systemctl", "--user", "restart", "uav-yolo.service"]
+```
 
 ## missions/visual_tracking/config.yaml
 
@@ -149,7 +164,33 @@ real:
 
 YOLO 感知配置，包含模型路径、视频源、UDP 输出目标、目标选择策略、显示和保存选项。
 
+本地窗口和浏览器标注画面可独立启用：
+
+```yaml
+display:
+  local_window_enabled: false
+  fullscreen: false
+
+web_stream:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8081
+  jpeg_quality: 75
+  max_fps: 20
+```
+
 注意保持 UDP 端口与 `config/app.yaml` 一致。
+
+## Web 配置编辑
+
+配置页只开放 `config/app.yaml`、`config/telemetry.yaml`、
+`yolo_app/config.yaml` 和 `missions/*/config.yaml`。每次保存会写入同路径
+`.bak` 作为上一次版本。
+
+- 当前 mission 的“保存并应用”先关闭 `SEND`、清空连续命令，再热重载任务配置。
+- telemetry 的“保存并重连”先关闭 `SEND`，再按新配置重建通信连接。
+- YOLO 与 app 的“保存并重启”调用 `services_control` 中配置的命令。
+- 应用、重连或重启之后 `SEND` 均保持关闭，必须人工重新开启。
 
 ## bool 配置规则
 

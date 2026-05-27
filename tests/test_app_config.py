@@ -25,6 +25,7 @@ def test_loads_mission_local_config_layout() -> None:
     config = load_app_config(args)
 
     assert config.runtime.ui_enabled is False
+    assert config.ui.web_enabled is False
     assert config.runtime.connect_telemetry is True
     assert config.blackbox.enabled is True
     assert config.blackbox.sample_hz == pytest.approx(20.0)
@@ -42,6 +43,16 @@ def test_loads_mission_local_config_layout() -> None:
     assert Path(config.mission_config_path).parent.name == "visual_tracking"
     assert config.mission.initial_mode == "OVERHEAD_HOLD"
     assert config.mission.overhead_entry_target_size_thresh == pytest.approx(10.0)
+
+
+def test_loads_independent_web_and_terminal_ui_settings() -> None:
+    args = build_arg_parser().parse_args(["--send-commands", "false"])
+
+    config = load_app_config(args)
+
+    assert config.ui.web_enabled is True
+    assert config.ui.terminal_enabled is False
+    assert config.ui.web_port == 8080
 
 
 def test_mission_name_can_be_overridden_from_cli() -> None:

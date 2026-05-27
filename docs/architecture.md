@@ -167,6 +167,7 @@ MissionStage.update()
 - 维护主目标。
 - 通过 UDP JSON 输出当前主目标。
 - 接收目标选择相关的简单命令。
+- 发布已经标注的 MJPEG 网页视频流。
 
 禁止事项：
 
@@ -187,6 +188,22 @@ MissionStage.update()
 - 不直接解析 YOLO 图像。
 - 不直接计算 stage controller 控制律。
 - 不绕过 `telemetry_link` 发送 MAVLink。
+
+## web_ui/
+
+职责：
+
+- 随 `app.main` 启动 FastAPI 浏览器控制台。
+- 通过现有 UI 命令分发和 `SystemRunner` 受控操作执行人工动作。
+- 推送结构化状态、重要事件和持久化操作审计。
+- 仅对白名单 YAML 提供保存、单级恢复和应用操作。
+
+禁止事项：
+
+- 不直接构造或发送 MAVLink message。
+- 不直接计算控制律。
+- 不开放任意文件路径。
+- 配置应用、通信重连或 app 重启前不得绕过 `SEND=OFF` 安全动作。
 
 ## config/
 
