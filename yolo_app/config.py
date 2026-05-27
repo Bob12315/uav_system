@@ -36,6 +36,11 @@ class AppConfig:
     camera_fourcc: str
     latest_frame: bool
     fullscreen: bool
+    web_stream_enabled: bool
+    web_stream_host: str
+    web_stream_port: int
+    web_stream_jpeg_quality: int
+    web_stream_max_fps: float
 
 
 def _str_to_bool(value: str | bool) -> bool:
@@ -100,6 +105,10 @@ def load_config() -> AppConfig:
     parser = build_arg_parser()
     args = parser.parse_args()
     yaml_config = _load_yaml_config(args.config)
+    display_config = yaml_config.get("display", {})
+    web_stream_config = yaml_config.get("web_stream", {})
+    if not isinstance(display_config, dict) or not isinstance(web_stream_config, dict):
+        raise ValueError("display and web_stream config must be mappings")
 
     merged = dict(yaml_config)
     for key, value in vars(args).items():
@@ -119,7 +128,7 @@ def load_config() -> AppConfig:
         selection_mode=str(merged["selection_mode"]),
         target_class=str(merged.get("target_class", "")),
         max_lost_frames=int(merged["max_lost_frames"]),
-        show=bool(merged["show"]),
+        show=bool(display_config.get("local_window_enabled", merged["show"])),
         save_video=bool(merged["save_video"]),
         save_path=_expand_user_path(merged["save_path"]),
         line_width=int(merged.get("line_width", 2)),
@@ -134,5 +143,10 @@ def load_config() -> AppConfig:
         camera_fps=int(merged.get("camera_fps", 30)),
         camera_fourcc=str(merged.get("camera_fourcc", "MJPG")),
         latest_frame=bool(merged.get("latest_frame", False)),
-        fullscreen=bool(merged.get("fullscreen", False)),
+        fullscreen=bool(display_config.get("fullscreen", merged.get("fullscreen", False))),
+        web_stream_enabled=bool(web_stream_config.get("enabled", False)),
+        web_stream_host=str(web_stream_config.get("host", "0.0.0.0")),
+        web_stream_port=int(web_stream_config.get("port", 8081)),
+        web_stream_jpeg_quality=int(web_stream_config.get("jpeg_quality", 75)),
+        web_stream_max_fps=float(web_stream_config.get("max_fps", 20.0)),
     )

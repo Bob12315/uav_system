@@ -42,8 +42,8 @@ target_class: "target"
 # 锁定目标连续丢失多少帧后判定为真正丢失并自动解锁
 max_lost_frames: 5
 
-# 是否显示 OpenCV 可视化窗口；无图形界面或不需要显示时设为 false
-show: true
+# 旧版本地显示开关，display.local_window_enabled 存在时以新配置为准
+show: false
 
 # 是否保存带标注的视频结果
 save_video: false
@@ -69,5 +69,14 @@ command_port: 5006
 # OpenCV 显示窗口名称，show=true 时生效
 window_name: "YOLO Tracking"
 
-# 板载屏幕以全屏窗口显示
-fullscreen: true
+# 本地窗口与网页视频输出可独立开启
+display:
+  local_window_enabled: false
+  fullscreen: false
+
+web_stream:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8081
+  jpeg_quality: 75
+  max_fps: 20
