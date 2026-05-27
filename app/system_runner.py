@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import logging
 import math
+import subprocess
 import threading
 import time
 from collections import deque
+from dataclasses import asdict
 from pathlib import Path
 
 import yaml
 
-from app.app_config import AppConfig, load_mission_stage_runtime_config
+from app.app_config import AppConfig, ROOT_DIR, load_mission_stage_runtime_config, load_telemetry_config
 from app.blackbox_recorder import BlackboxRecorder
 from app.debug_runtime import DebugRuntime
 from app.health_monitor import HealthMonitor, HealthMonitorConfig
@@ -74,17 +76,25 @@ class SystemRunner:
         self.last_send_commands: bool | None = None
         self.target_lost_since: float | None = None
         self.lost_target_recenter_sent = False
+        self.web_server = None
+        self.system_events: deque[dict[str, object]] = deque(maxlen=160)
+        self.latest_snapshot: dict[str, object] = {}
 
     def run(self) -> None:
         self.services.start()
         self.mission_runner.link_manager = self.services.link_manager
         self.blackbox.start()
         self.executor.set_telemetry_link(self.services.link_manager)
+        if self.config.ui.web_enabled:
+            from web_ui.server import WebUiServer
+
+            self.web_server = WebUiServer(self, self.config.ui)
+            self.web_server.start()
         try:
-            if self.config.runtime.ui_enabled and self.services.link_manager is not None:
+            if self.config.ui.terminal_enabled and self.services.link_manager is not None:
                 self._run_with_ui()
             else:
-                if self.config.runtime.ui_enabled and self.services.link_manager is None:
+                if self.config.ui.terminal_enabled and self.services.link_manager is None:
                     self.logger.warning("UI disabled because telemetry is not connected")
                 self._control_loop()
         finally:
@@ -94,6 +104,9 @@ class SystemRunner:
         self.stop_event.set()
         self.executor.reset()
         self.blackbox.close()
+        if self.web_server is not None:
+            self.web_server.stop()
+            self.web_server = None
         self.services.stop()
         self.logger.info("app runtime stopped")
 
@@ -218,6 +231,15 @@ class SystemRunner:
                     self.latest_mission_stage = mission.stage or "UNKNOWN"
                     self.latest_stage_controller = mission.active_mode
                     self.latest_hold_reason = mode_status.hold_reason or mission.hold_reason
+                    self.latest_snapshot = {
+                        "perception": asdict(perception),
+                        "scene": asdict(scene),
+                        "drone": asdict(drone),
+                        "gimbal": asdict(gimbal),
+                        "link": asdict(link) if link is not None else {},
+                        "health": {"hold_reason": health.hold_reason},
+                        "command": asdict(shaped),
+                    }
 
                 if (now - last_print_time) >= print_sleep_sec:
                     self.logger.info(
@@ -299,6 +321,154 @@ class SystemRunner:
         line = self._format_control_command(now, shaped, send_commands)
         with self.control_command_log_lock:
             self.control_command_log.appendleft(line)
+
+    def disable_automatic_sending(self, reason: str) -> None:
+        self.controller_switches.set_send_commands(False)
+        if self.services.link_manager is not None:
+            self.services.link_manager.clear_continuous_commands()
+        self._record_event("SAFETY", f"automatic command sending disabled: {reason}")
+
+    def _record_event(self, level: str, message: str) -> None:
+        with self.control_command_log_lock:
+            self.system_events.appendleft(
+                {"timestamp": time.time(), "level": level, "message": message}
+            )
+
+    def web_status_snapshot(self) -> dict[str, object]:
+        with self.control_command_log_lock:
+            snapshot = dict(self.latest_snapshot)
+            snapshot.update(
+                {
+                    "mission": self.latest_mission_name,
+                    "stage": self.latest_mission_stage,
+                    "stage_controller": self.latest_stage_controller,
+                    "hold_reason": self.latest_hold_reason,
+                    "controllers": asdict(self.controller_switches.snapshot()),
+                    "events": list(self.system_events)[:40],
+                    "actions": self.mission_runner.get_action_log_lines()[:20],
+                }
+            )
+        manager = self.services.link_manager
+        snapshot["active_source"] = manager.get_active_source() if manager is not None else "none"
+        return self._json_safe(snapshot)
+
+    @classmethod
+    def _json_safe(cls, value):
+        if isinstance(value, float):
+            return value if math.isfinite(value) else None
+        if isinstance(value, dict):
+            return {str(key): cls._json_safe(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [cls._json_safe(item) for item in value]
+        return value
+
+    def web_execute_command(self, command: str) -> CommandResult:
+        stripped = command.strip()
+        if not stripped:
+            return CommandResult(False, "empty command")
+        if stripped.startswith("switch_source "):
+            self.disable_automatic_sending("source_switch")
+        manager = self.services.link_manager
+        if manager is None:
+            if stripped.startswith("target "):
+                return self._execute_yolo_command(stripped)
+            return CommandResult(False, "telemetry is not connected")
+        handler = build_ui_command_handler(
+            manager,
+            controller_switches=self.controller_switches,
+            yolo_client=YoloCommandClient(self.config.yolo_command),
+            mission_command_handler=self._handle_mission_command,
+            stage_override_handler=self._set_stage_override,
+            stage_config_reload_handler=self._reload_mission_stage_config,
+        )
+        result = handler(stripped)
+        self._record_event("OK" if result.ok else "ERROR", result.message)
+        return result
+
+    def _execute_yolo_command(self, command: str) -> CommandResult:
+        parts = command.split()
+        client = YoloCommandClient(self.config.yolo_command)
+        try:
+            if parts[1] == "lock" and len(parts) == 3:
+                client.lock_target(int(parts[2]))
+            elif parts[1] == "unlock":
+                client.unlock_target()
+            elif parts[1] == "next":
+                client.send("switch_next")
+            elif parts[1] in {"prev", "previous"}:
+                client.send("switch_prev")
+            else:
+                return CommandResult(False, "format: target <next|prev|lock <track_id>|unlock>")
+        except Exception as exc:
+            return CommandResult(False, f"target command failed: {exc}")
+        result = CommandResult(True, f"{command} sent")
+        self._record_event("OK", result.message)
+        return result
+
+    def web_missions(self) -> list[dict[str, object]]:
+        active = self.mission_runner.mission.name
+        return [
+            {"name": name, "active": name == active, "config_path": f"missions/{name}/config.yaml"}
+            for name in available_mission_names()
+        ]
+
+    def apply_active_mission_config(self, relative_path: str) -> CommandResult:
+        active_path = f"missions/{self.mission_runner.mission.name}/config.yaml"
+        if relative_path != active_path:
+            return CommandResult(True, "mission config saved; applies when that mission is selected")
+        self.disable_automatic_sending("mission_config_apply")
+        try:
+            settings = self._load_mission_settings(self.mission_runner.mission.name)
+            mission = build_mission_from_settings(
+                self.mission_runner.mission.name,
+                settings,
+                visual_config=self.config.mission,
+            )
+            with self.runtime_config_lock:
+                self.mission_runner.mission = mission
+                self.config.mission_settings = dict(settings)
+                self._reset_mission_runtime(clear_for_safety=True)
+            result = (
+                self._reload_mission_stage_config()
+                if self.mission_runner.mission.name == "visual_tracking"
+                else CommandResult(True, f"mission config reloaded: {relative_path}")
+            )
+        except Exception as exc:
+            self.logger.exception("failed to reload active mission config")
+            result = CommandResult(False, f"mission config reload failed: {exc}")
+        self._record_event("CONFIG" if result.ok else "ERROR", result.message)
+        return result
+
+    def reconnect_telemetry_from_saved_config(self) -> CommandResult:
+        try:
+            config = load_telemetry_config(str(ROOT_DIR / "config" / "telemetry.yaml"))
+        except Exception as exc:
+            return CommandResult(False, f"telemetry configuration invalid: {exc}")
+        self.disable_automatic_sending("telemetry_reconnect")
+        self.services.reconnect_telemetry(config)
+        self.mission_runner.link_manager = self.services.link_manager
+        self.executor.set_telemetry_link(self.services.link_manager)
+        self._record_event("LINK", "telemetry reconnect started; SEND remains OFF")
+        return CommandResult(True, "telemetry reconnect started; SEND remains OFF")
+
+    def restart_external_service(self, service: str) -> CommandResult:
+        command = (
+            self.config.services_control.restart_yolo_command
+            if service == "yolo"
+            else self.config.services_control.restart_app_command
+            if service == "app"
+            else []
+        )
+        if not command:
+            return CommandResult(False, f"{service} restart command is not configured")
+        if service == "app":
+            self.disable_automatic_sending("app_restart")
+        try:
+            subprocess.Popen(command)
+        except OSError as exc:
+            return CommandResult(False, f"failed to restart {service}: {exc}")
+        self._record_event("SERVICE", f"{service} restart requested")
+        return CommandResult(True, f"{service} restart requested")
 
     def _get_mission_control_lines(self) -> list[str]:
         with self.control_command_log_lock:

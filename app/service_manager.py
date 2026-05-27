@@ -13,6 +13,7 @@ from fusion.fusion_manager import FusionManager
 from fusion.models import FusionConfig, PerceptionTarget, SceneDetections, SceneObject
 from telemetry_link.link_manager import LinkManager
 from telemetry_link.models import DroneState, GimbalState, LinkStatus
+from telemetry_link.config import TelemetryConfig
 
 
 class YoloUdpReceiver(threading.Thread):
@@ -185,6 +186,14 @@ class ServiceManager:
         if self.link_manager is not None:
             self.link_manager.stop()
             self.link_manager = None
+
+    def reconnect_telemetry(self, config: TelemetryConfig) -> None:
+        if self.link_manager is not None:
+            self.link_manager.stop()
+        self.config.telemetry = config
+        self.link_manager = LinkManager(config)
+        self.link_manager.start_background()
+        self.logger.info("telemetry link manager restarted from saved configuration")
 
     def get_perception(self, now: float) -> PerceptionTarget:
         if self.yolo_receiver is None:
