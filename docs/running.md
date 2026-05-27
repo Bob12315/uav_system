@@ -46,13 +46,30 @@ python -m app.main --connect-telemetry --send-commands false
 
 如果 SITL/飞控尚未启动，telemetry 会在后台重连，app 主循环仍会运行。
 
-## 4. app + UI
+## 4. app + Web UI
 
 ```bash
-python -m app.main --connect-telemetry --ui --send-commands false
+python -m app.main --connect-telemetry --send-commands false
 ```
 
-这是 curses 终端 UI，不是网页 GUI。当前 UI 依赖 `LinkManager`，所以需要 `--connect-telemetry`。
+当 `config/app.yaml` 中 `ui.web_enabled: true` 时，从同一局域网的笔记本访问：
+
+```text
+http://<x86-or-rk3588-address>:8080/
+```
+
+同时启动 `yolo_app` 后，网页显示由它输出的 MJPEG 标注视频。Web 和
+curses 可以用 `ui.web_enabled`、`ui.terminal_enabled` 独立启用。
+`--ui` 临时打开终端 UI，`--no-ui` 同时关闭两个 UI 以便 smoke test。
+
+网页上的 app/YOLO 重启操作要求安装 [systemd 模板](../deploy/systemd/)：
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp deploy/systemd/uav-*.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now uav-app.service uav-yolo.service
+```
 
 ## 5. 独立 telemetry 服务
 

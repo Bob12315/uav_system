@@ -195,9 +195,26 @@ class BlackboxConfig:
 
 
 @dataclass(slots=True)
+class UiConfig:
+    web_enabled: bool
+    terminal_enabled: bool
+    web_host: str
+    web_port: int
+    audit_log_path: str
+
+
+@dataclass(slots=True)
+class ServiceControlConfig:
+    restart_app_command: list[str]
+    restart_yolo_command: list[str]
+
+
+@dataclass(slots=True)
 class AppConfig:
     runtime: AppRuntimeConfig
     blackbox: BlackboxConfig
+    ui: UiConfig
+    services_control: ServiceControlConfig
     control: ControlConfig
     telemetry: TelemetryConfig
     yolo_command: YoloCommandConfig
@@ -316,6 +333,8 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
 
     runtime_data = _section(app_data, "runtime")
     services_data = _section(app_data, "services")
+    ui_data = _section(app_data, "ui")
+    services_control_data = _section(app_data, "services_control")
     blackbox_data = _section(app_data, "blackbox")
     recovery_data = _normalize_recovery_config(
         mission_file_data if mission_file_data else app_data,
@@ -354,6 +373,25 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
     )
     if args.ui_enabled is not None:
         ui_enabled = bool(args.ui_enabled)
+    terminal_enabled = _cfg_bool(ui_data, "terminal_enabled", ui_enabled, "ui")
+    if args.ui_enabled is not None:
+        terminal_enabled = bool(args.ui_enabled)
+    audit_log_path = Path(str(ui_data.get("audit_log_path", "logs/web_ui/audit.jsonl"))).expanduser()
+    if not audit_log_path.is_absolute():
+        audit_log_path = ROOT_DIR / audit_log_path
+    ui_cfg = UiConfig(
+        web_enabled=_cfg_bool(ui_data, "web_enabled", False, "ui"),
+        terminal_enabled=terminal_enabled,
+        web_host=str(ui_data.get("web_host", "0.0.0.0")),
+        web_port=int(ui_data.get("web_port", 8080)),
+        audit_log_path=str(audit_log_path),
+    )
+    if args.ui_enabled is False:
+        ui_cfg.web_enabled = False
+    service_control_cfg = ServiceControlConfig(
+        restart_app_command=_command_list(services_control_data.get("restart_app_command")),
+        restart_yolo_command=_command_list(services_control_data.get("restart_yolo_command")),
+    )
 
     runtime_cfg = AppRuntimeConfig(
         yolo_udp_ip=args.yolo_udp_ip or str(runtime_data.get("yolo_udp_ip", "0.0.0.0")),
@@ -379,7 +417,7 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
             else _cfg_bool(runtime_data, "require_gimbal_feedback", True)
         ),
         log_level=args.log_level or str(runtime_data.get("log_level", "INFO")),
-        ui_enabled=ui_enabled,
+        ui_enabled=terminal_enabled,
         connect_telemetry=connect_telemetry,
         start_yolo_udp=(
             False
@@ -425,6 +463,8 @@ def load_app_config(args: argparse.Namespace) -> AppConfig:
     return AppConfig(
         runtime=runtime_cfg,
         blackbox=blackbox_cfg,
+        ui=ui_cfg,
+        services_control=service_control_cfg,
         control=control_cfg,
         telemetry=telemetry_cfg,
         yolo_command=yolo_command_cfg,
@@ -531,6 +571,14 @@ def _build_blackbox_config(data: dict[str, Any], args: argparse.Namespace) -> Bl
         include_commands=_cfg_bool(data, "include_commands", True, "blackbox"),
         include_events=_cfg_bool(data, "include_events", True, "blackbox"),
     )
+
+
+def _command_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError("service restart command must be a list of strings")
+    return list(value)
 
 
 def load_yolo_command_config(path: str) -> YoloCommandConfig:
@@ -1050,6 +1098,14 @@ def _load_legacy_app_config(args: argparse.Namespace) -> AppConfig:
             lost_target_recenter_yaw_deg=float(control_cfg.gimbal.lost_target_recenter_yaw_deg),
         ),
         blackbox=_build_blackbox_config({}, args),
+        ui=UiConfig(
+            web_enabled=False,
+            terminal_enabled=telemetry_cfg.ui_enabled if args.ui_enabled is None else bool(args.ui_enabled),
+            web_host="0.0.0.0",
+            web_port=8080,
+            audit_log_path=str(ROOT_DIR / "logs" / "web_ui" / "audit.jsonl"),
+        ),
+        services_control=ServiceControlConfig([], []),
         control=control_cfg,
         telemetry=telemetry_cfg,
         yolo_command=yolo_command_cfg,
