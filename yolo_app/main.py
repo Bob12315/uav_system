@@ -12,6 +12,7 @@ import cv2
 from annotator import Annotator
 from command_receiver import CommandReceiver
 from config import load_config
+from mjpeg_stream import MjpegStream
 from target_manager import TargetManager, build_scene_detections
 from tracker_runner import TrackerRunner
 from udp_publisher import UdpPublisher
@@ -34,6 +35,23 @@ def main() -> int:
     command_receiver = CommandReceiver(cfg.command_ip, cfg.command_port, enabled=cfg.command_enabled)
     annotator = Annotator(cfg)
     writer = None
+    web_stream = (
+        MjpegStream(
+            cfg.web_stream_host,
+            cfg.web_stream_port,
+            cfg.web_stream_jpeg_quality,
+            cfg.web_stream_max_fps,
+        )
+        if cfg.web_stream_enabled
+        else None
+    )
+
+    if cfg.show:
+        cv2.namedWindow(cfg.window_name, cv2.WINDOW_NORMAL)
+        if cfg.fullscreen:
+            cv2.setWindowProperty(cfg.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    if web_stream is not None:
+        web_stream.start()
 
     try:
         while True:
@@ -65,7 +83,7 @@ def main() -> int:
             )
             udp_publisher.publish(current_target, scene)
 
-            if cfg.show or cfg.save_video:
+            if cfg.show or cfg.save_video or web_stream is not None:
                 annotated = annotator.annotate(
                     frame=frame,
                     tracks=tracks,
@@ -77,6 +95,8 @@ def main() -> int:
                     key = cv2.waitKey(1) & 0xFF
                     if key in {27, ord("q")}:
                         break
+                if web_stream is not None:
+                    web_stream.publish(annotated)
                 if cfg.save_video:
                     if writer is None:
                         fps = video_source.cap.get(cv2.CAP_PROP_FPS)
@@ -86,6 +106,8 @@ def main() -> int:
         video_source.release()
         udp_publisher.close()
         command_receiver.close()
+        if web_stream is not None:
+            web_stream.close()
         if writer is not None:
             writer.release()
         cv2.destroyAllWindows()
