@@ -27,7 +27,7 @@
 ## 数据流
 
 ```text
-Serial / UDP / TCP
+Serial / UDP / TCP / ETH
   -> MavlinkClient
   -> TelemetryReceiver
   -> StateCache

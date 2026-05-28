@@ -150,13 +150,16 @@ sitl:
   tcp_port: 5762
 
 real:
-  connection_type: serial
+  connection_type: eth
   serial_port: /dev/ttyUSB0
   baudrate: 57600
+  eth_mode: udpin
+  eth_host: 0.0.0.0
+  eth_port: 15001
 ```
 
 - SITL 端口需要和实际 `sim_vehicle.py` 输出一致。
-- 实机串口和波特率需要按硬件修改。
+- 实机可使用 `serial` 或 `eth`；ETH 直连 RK3588 网口时，通常让 RK3588 侧监听 `udpin:0.0.0.0:15001`，也可按飞控配置切到 `udpout` 或 `tcp`。
 - `control_send_rate_hz` 控制连续命令最高发送频率。
 - `request_message_intervals` 为 true 时会请求常用 MAVLink 消息频率。
 

@@ -13,6 +13,7 @@ from telemetry_link.command_queue import CommandQueue
 from telemetry_link.command_sender import CommandSender
 from telemetry_link.config import EndpointConfig, TelemetryConfig, load_config
 from telemetry_link.link_manager import LinkManager, SourceRuntime
+from telemetry_link.mavlink_client import MavlinkClient
 from telemetry_link.models import ActionCommand, ActionType, ControlCommand, ControlType, GimbalRateCommand
 from telemetry_link.state_cache import StateCache
 from telemetry_link.telemetry_receiver import TelemetryReceiver
@@ -29,6 +30,9 @@ def _endpoint(name: str) -> EndpointConfig:
         udp_port=14550,
         tcp_host="127.0.0.1",
         tcp_port=5762,
+        eth_mode="udpin",
+        eth_host="0.0.0.0",
+        eth_port=14550,
     )
 
 
@@ -155,6 +159,87 @@ log_level: INFO
     assert cfg.request_message_intervals is False
     assert cfg.state_udp_enabled is False
     assert cfg.ui_enabled is False
+
+
+def test_load_config_parses_eth_endpoint(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "telemetry.yaml"
+    path.write_text(
+        """
+data_source: real
+active_source: real
+sitl:
+  connection_type: tcp
+real:
+  connection_type: eth
+  eth_mode: udpout
+  eth_host: 192.168.144.10
+  eth_port: 14550
+control_send_rate_hz: 10
+action_cmd_retries: 0
+action_retry_interval_sec: 0.01
+heartbeat_timeout_sec: 0.05
+rx_timeout_sec: 0.05
+reconnect_interval_sec: 0.01
+receiver_idle_sleep_sec: 0.01
+sender_idle_sleep_sec: 0.01
+request_message_intervals: false
+message_interval_hz: {}
+state_udp_enabled: false
+ui_enabled: false
+log_level: INFO
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sys.argv", ["telemetry_link.main", "--config", str(path)])
+
+    cfg = load_config()
+
+    assert cfg.real.connection_type == "eth"
+    assert cfg.real.eth_mode == "udpout"
+    assert cfg.real.eth_host == "192.168.144.10"
+    assert cfg.real.eth_port == 14550
+
+
+def test_mavlink_client_uses_eth_udp_connection_string(monkeypatch) -> None:
+    calls = []
+
+    def fake_open(url: str, baud: int | None = None):
+        calls.append((url, baud))
+        return object()
+
+    endpoint = _endpoint("real")
+    endpoint.connection_type = "eth"
+    endpoint.eth_mode = "udpin"
+    endpoint.eth_host = "0.0.0.0"
+    endpoint.eth_port = 14550
+    monkeypatch.setattr("telemetry_link.mavlink_client.open_mavlink_connection", fake_open)
+
+    client = MavlinkClient(endpoint)
+    client.connect()
+
+    assert client.connection_string == "udpin:0.0.0.0:14550"
+    assert calls == [("udpin:0.0.0.0:14550", None)]
+
+
+def test_mavlink_client_uses_eth_tcp_connection_string(monkeypatch) -> None:
+    calls = []
+
+    def fake_open(url: str, baud: int | None = None):
+        calls.append((url, baud))
+        return object()
+
+    endpoint = _endpoint("real")
+    endpoint.connection_type = "eth"
+    endpoint.eth_mode = "tcp"
+    endpoint.eth_host = "192.168.144.10"
+    endpoint.eth_port = 5760
+    monkeypatch.setattr("telemetry_link.mavlink_client.open_mavlink_connection", fake_open)
+
+    client = MavlinkClient(endpoint)
+    client.connect()
+
+    assert client.connection_string == "tcp:192.168.144.10:5760"
+    assert calls == [("tcp:192.168.144.10:5760", None)]
 
 
 def test_load_config_rejects_invalid_bool_string(tmp_path, monkeypatch) -> None:
