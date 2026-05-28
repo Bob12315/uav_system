@@ -63,6 +63,22 @@ function renderStatus(next) {
   $("targetCurrent").textContent = target.target_valid
     ? `当前锁定: ${target.class_name} #${target.track_id} (${Number(target.confidence).toFixed(2)})`
     : "当前锁定: --";
+  const scene = next.scene || {};
+  const detections = scene.detections || [];
+  infoRows($("targetInfo"), [
+    ["目标状态", target.target_valid ? "LOCKED" : (target.tracking_state || "--").toUpperCase()],
+    ["Track ID", target.target_valid ? `#${target.track_id}` : "--"],
+    ["类别/置信度", target.target_valid ? `${target.class_name || "--"} / ${num(target.confidence, 2)}` : "--"],
+    ["Frame", `${scene.frame_id ?? target.frame_id ?? "--"}`],
+    ["检测数", `${detections.length}`],
+    ["图像尺寸", `${scene.image_width || target.image_width || "--"} x ${scene.image_height || target.image_height || "--"}`],
+    ["中心 cx/cy", target.target_valid ? `${num(target.cx, 1)} / ${num(target.cy, 1)}` : "--"],
+    ["框 w/h", target.target_valid ? `${num(target.w, 1)} / ${num(target.h, 1)}` : "--"],
+    ["误差 ex/ey", target.target_valid ? `${num(target.ex, 3)} / ${num(target.ey, 3)}` : "--"],
+    ["目标尺寸", target.target_valid ? num(target.target_size, 3) : "--"],
+    ["丢失计数", `${target.lost_count ?? "--"}`],
+    ["Scene 时间", stamp(scene.timestamp || target.timestamp)],
+  ]);
   infoRows($("aircraftInfo"), [
     ["数据源", `${String(next.active_source || "--").toUpperCase()} / ${link.status_text || "--"}`],
     ["链路", `${boolText(link.connected, "OK", "DOWN")} ${link.transport || ""}`.trim()],
@@ -94,7 +110,7 @@ function renderStatus(next) {
     ["云台时间", stamp(gimbal.last_update_time || gimbal.timestamp)],
     ["最新消息", drone.last_message_type || "--"],
   ]);
-  renderDetections(next.scene || {}, target);
+  renderDetections(scene, target);
   cards($("statusCards"), {
     "链路": `${link.status_text || "--"} / ${link.transport || "--"}`,
     "心跳": link.connected ? `${num(drone.hb_age_sec, 2, " s")} ago` : "--",

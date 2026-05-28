@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>UAV Web Control</title>
-  <link rel="stylesheet" href="/static/style.css?v=aircraft-info-poll">
+  <link rel="stylesheet" href="/static/style.css?v=target-info">
 </head>
 <body>
   <header>
@@ -35,6 +35,10 @@
         <section class="aircraft-info">
           <div class="aircraft-info-title">飞机信息</div>
           <div id="aircraftInfo" class="aircraft-info-grid"></div>
+        </section>
+        <section class="target-info">
+          <div class="aircraft-info-title">目标信息</div>
+          <div id="targetInfo" class="aircraft-info-grid"></div>
         </section>
         <div id="targetCurrent" class="current-target">当前锁定: --</div>
         <div id="detections" class="detections"></div>
@@ -142,6 +146,6 @@
       </article>
     </section>
   </main>
-  <script src="/static/app.js?v=aircraft-info-poll"></script>
+  <script src="/static/app.js?v=target-info"></script>
 </body>
 </html>

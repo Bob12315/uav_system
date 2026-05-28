@@ -66,6 +66,13 @@ button.danger, button.stop { border-color: var(--danger); color: #ffabb0; }
   padding: 10px;
   margin-bottom: 10px;
 }
+.target-info {
+  border: 1px solid var(--line);
+  background: #101c2a;
+  border-radius: 5px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
 .aircraft-info-title {
   color: var(--accent);
   font-weight: 700;
