@@ -10,15 +10,7 @@ class Annotator:
     def __init__(self, cfg: AppConfig) -> None:
         self.cfg = cfg
 
-    def annotate(
-        self,
-        frame,
-        tracks: list[Track],
-        current_target: CurrentTarget,
-        locked_track_id: int | None,
-        fps: float = 0.0,
-        latency_ms: float = 0.0,
-    ):
+    def annotate(self, frame, tracks: list[Track], current_target: CurrentTarget, locked_track_id: int | None):
         image = frame.copy()
         h, w = image.shape[:2]
         self._draw_crosshair(image, w, h)
@@ -30,7 +22,7 @@ class Annotator:
                 if is_locked:
                     self._draw_target_vector(image, w, h, track)
 
-        self._draw_status(image, current_target, locked_track_id, fps, latency_ms)
+        self._draw_status(image, current_target, locked_track_id)
         return image
 
     def _draw_track(self, image, track: Track, is_locked: bool) -> None:
@@ -45,16 +37,8 @@ class Annotator:
         if is_locked:
             cv2.circle(image, (int(track.cx), int(track.cy)), 4, color, -1)
 
-    def _draw_status(
-        self,
-        image,
-        current_target: CurrentTarget,
-        locked_track_id: int | None,
-        fps: float,
-        latency_ms: float,
-    ) -> None:
+    def _draw_status(self, image, current_target: CurrentTarget, locked_track_id: int | None) -> None:
         rows = [
-            f"NPU INT8: {fps:.1f} FPS  {latency_ms:.1f} ms",
             f"state: {current_target.tracking_state}",
             f"locked_track_id: {locked_track_id if locked_track_id is not None else -1}",
             f"lost_count: {current_target.lost_count}",

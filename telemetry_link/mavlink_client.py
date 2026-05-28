@@ -41,6 +41,14 @@ class MavlinkClient:
         elif self.endpoint.connection_type == "tcp":
             connection_string = f"tcp:{self.endpoint.tcp_host}:{self.endpoint.tcp_port}"
             baud = None
+        elif self.endpoint.connection_type == "eth":
+            if self.endpoint.eth_mode == "tcp":
+                connection_string = f"tcp:{self.endpoint.eth_host}:{self.endpoint.eth_port}"
+            elif self.endpoint.eth_mode in {"udpin", "udpout"}:
+                connection_string = f"{self.endpoint.eth_mode}:{self.endpoint.eth_host}:{self.endpoint.eth_port}"
+            else:
+                raise ValueError(f"unsupported eth_mode: {self.endpoint.eth_mode}")
+            baud = None
         else:
             raise ValueError(f"unsupported connection_type: {self.endpoint.connection_type}")
 

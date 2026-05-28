@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-CONTROL_ENV="${CONTROL_ENV:-app}"
+CONTROL_ENV="${CONTROL_ENV:-uav-control}"
 YOLO_ENV="${YOLO_ENV:-yolo}"
 
 if ! command -v conda >/dev/null 2>&1; then
@@ -21,10 +21,10 @@ echo "Checking YOLO environment '${YOLO_ENV}'..."
 conda run -n "${YOLO_ENV}" bash -lc "cd '${REPO_ROOT}/yolo_app' && python main.py --help >/dev/null"
 conda run -n "${YOLO_ENV}" python - <<'PY'
 import cv2
-from rknnlite.api import RKNNLite
+import ultralytics
 
 print("opencv", cv2.__version__)
-print("rknnlite", RKNNLite)
+print("ultralytics", ultralytics.__version__)
 PY
 
 echo

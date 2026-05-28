@@ -426,9 +426,8 @@ FlightCommand 实发：OVERHEAD_HOLD 等连续控制
 
 ```bash
 conda activate yolo
-cd ~/uav_project/uav_system-platform-rk3588/yolo_app
-DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 \
-DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus python main.py
+cd /home/level6/uav_project/src/yolo_app
+python main.py
 ```
 
 确认 `yolo_app/config.yaml` 的 UDP 输出端口和 app 一致：

@@ -4,7 +4,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import threading
 import time
 
 import cv2
@@ -14,32 +13,12 @@ from models import FramePacket
 
 
 class VideoSource:
-    def __init__(
-        self,
-        source: str,
-        camera_width: int = 640,
-        camera_height: int = 480,
-        camera_fps: int = 30,
-        camera_fourcc: str = "MJPG",
-        latest_frame: bool = False,
-    ) -> None:
+    def __init__(self, source: str) -> None:
         self.source = source
-        self.camera_width = camera_width
-        self.camera_height = camera_height
-        self.camera_fps = camera_fps
-        self.camera_fourcc = camera_fourcc
         self.frame_id = 0
         self.cap: cv2.VideoCapture | None = None
         self.udp_process: subprocess.Popen | None = None
         self.udp_frame_shape: tuple[int, int, int] | None = None
-        self.latest_frame = latest_frame and source.startswith("/dev/video")
-        self.condition = threading.Condition()
-        self.camera_frame = None
-        self.camera_timestamp = 0.0
-        self.camera_sequence = 0
-        self.consumed_sequence = 0
-        self.stopped = False
-        self.reader_thread: threading.Thread | None = None
 
         if source.isdigit():
             self._open_udp_port_source(int(source))
@@ -47,17 +26,9 @@ class VideoSource:
             self.cap = self._open_capture(source)
             if not self.cap.isOpened():
                 raise RuntimeError(f"failed to open video source: {source}")
-            if self.latest_frame:
-                self.reader_thread = threading.Thread(target=self._camera_reader, daemon=True)
-                self.reader_thread.start()
 
     def read(self) -> FramePacket | None:
-        timestamp = time.time()
-        if self.latest_frame:
-            frame, timestamp = self._read_latest_frame()
-            if frame is None:
-                return None
-        elif self.udp_process is not None:
+        if self.udp_process is not None:
             frame = self._read_udp_frame()
             if frame is None:
                 return None
@@ -68,18 +39,13 @@ class VideoSource:
             if not ok or frame is None:
                 return None
 
-        packet = FramePacket(frame=frame, frame_id=self.frame_id, timestamp=timestamp)
+        packet = FramePacket(frame=frame, frame_id=self.frame_id, timestamp=time.time())
         self.frame_id += 1
         return packet
 
     def release(self) -> None:
-        self.stopped = True
         if self.cap is not None:
             self.cap.release()
-        with self.condition:
-            self.condition.notify_all()
-        if self.reader_thread is not None:
-            self.reader_thread.join(timeout=1.0)
         if self.udp_process is not None:
             self.udp_process.terminate()
             try:
@@ -101,36 +67,7 @@ class VideoSource:
             raise RuntimeError(
                 "failed to open GStreamer pipeline. Please check the pipeline string and required plugins."
             )
-        if capture_source.startswith("/dev/video"):
-            cap = cv2.VideoCapture(capture_source, cv2.CAP_V4L2)
-            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self.camera_fourcc))
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_width)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_height)
-            cap.set(cv2.CAP_PROP_FPS, self.camera_fps)
-            return cap
         return cv2.VideoCapture(capture_source)
-
-    def _camera_reader(self) -> None:
-        while not self.stopped and self.cap is not None:
-            ok, frame = self.cap.read()
-            if not ok or frame is None:
-                continue
-            with self.condition:
-                self.camera_frame = frame
-                self.camera_timestamp = time.time()
-                self.camera_sequence += 1
-                self.condition.notify_all()
-
-    def _read_latest_frame(self):
-        with self.condition:
-            while not self.stopped and (
-                self.camera_frame is None or self.camera_sequence <= self.consumed_sequence
-            ):
-                self.condition.wait(timeout=1.0)
-            if self.camera_frame is None:
-                return None, time.time()
-            self.consumed_sequence = self.camera_sequence
-            return self.camera_frame.copy(), self.camera_timestamp
 
     def _open_udp_port_source(self, udp_port: int) -> None:
         helper_path = Path(__file__).with_name("udp_gst_bridge_helper.py")

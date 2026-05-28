@@ -1,13 +1,13 @@
 # 安装说明
 
-建议分两个环境：app 环境和 YOLO 环境。用户先自行安装适合 RK3588/aarch64 的 Miniconda/Anaconda 或 Miniforge，并自行创建两个 conda 环境；本项目脚本只负责在已经激活的 `app` 环境里安装 app 侧依赖。
+建议分两个环境：控制环境和 YOLO 环境。
 
-## app 环境
+## 控制环境
 
 ```bash
-conda create -n app python=3.10 -y
-conda activate app
-bash scripts/install_app_env.sh
+conda create -n uav-control python=3.10 -y
+conda activate uav-control
+pip install pymavlink pyyaml pytest
 ```
 
 用途：
@@ -18,15 +18,6 @@ bash scripts/install_app_env.sh
 - `telemetry_link`
 - `uav_ui`
 - `tests`
-
-脚本会先检查：
-
-- 当前系统是 Linux。
-- 当前架构是 RK3588 常见的 `aarch64/arm64`。
-- 当前已经激活 conda 环境 `app`。
-- 当前 Python 版本是 `3.10.x`。
-
-脚本安装依赖时使用清华 conda/PyPI 镜像作为临时源，不修改用户全局 `.condarc` 或 pip 配置。`pymavlink` 通过 pip 镜像安装，其他 app 依赖优先通过 conda 安装。
 
 验证：
 
@@ -42,12 +33,17 @@ python -m pytest -q
 ```bash
 conda create -n yolo python=3.10 -y
 conda activate yolo
+pip install ultralytics opencv-python pyyaml
 ```
 
-在 NanoPC-T6 上安装与 RKNN Runtime `2.3.2` 相配的依赖：
+如果使用 GPU，请按本机 CUDA 版本安装合适的 PyTorch。可以先确认：
 
 ```bash
-pip install rknn-toolkit-lite2==2.3.2 opencv-python pyyaml numpy
+python - <<'PY'
+import torch
+print(torch.__version__)
+print(torch.cuda.is_available())
+PY
 ```
 
 ## 模型文件
@@ -55,17 +51,16 @@ pip install rknn-toolkit-lite2==2.3.2 opencv-python pyyaml numpy
 建议路径：
 
 ```text
-~/rk3588_yolo/rknn_model_zoo/examples/yolo11/model/best-int8-rk3588.rknn
+~/models/best.pt
 ```
 
 然后在 `yolo_app/config.yaml` 中配置：
 
 ```yaml
-model_path: "~/rk3588_yolo/rknn_model_zoo/examples/yolo11/model/best-int8-rk3588.rknn"
+model_path: "~/models/best.pt"
 ```
 
-模型为 Rockchip 优化的 INT8 RKNN 文件，输入为 RGB uint8 `(1, 640, 640, 3)`，固定使用
-`NPU_CORE_0_1_2`。不建议把 `.rknn` 模型提交到 Git。
+不建议把 `.pt` 模型提交到 Git。
 
 ## 可选依赖
 
@@ -76,7 +71,7 @@ model_path: "~/rk3588_yolo/rknn_model_zoo/examples/yolo11/model/best-int8-rk3588
 控制环境：
 
 ```bash
-conda activate app
+conda activate uav-control
 cd ~/uav_project/src
 python -m app.main --no-yolo-udp --run-seconds 1 --send-commands false
 ```
@@ -85,7 +80,6 @@ YOLO 环境：
 
 ```bash
 conda activate yolo
-cd ~/uav_project/uav_system-platform-rk3588/yolo_app
-DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 \
-DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus python main.py
+cd ~/uav_project/src/yolo_app
+python main.py
 ```

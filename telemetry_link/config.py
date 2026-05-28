@@ -19,6 +19,9 @@ class EndpointConfig:
     udp_port: int
     tcp_host: str
     tcp_port: int
+    eth_mode: str
+    eth_host: str
+    eth_port: int
 
 
 @dataclass(slots=True)
@@ -68,7 +71,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-source", choices=["real", "sitl", "dual"])
     parser.add_argument("--active-source", choices=["real", "sitl"])
 
-    parser.add_argument("--real-connection-type", choices=["serial", "udp", "tcp"])
+    parser.add_argument("--real-connection-type", choices=["serial", "udp", "tcp", "eth"])
     parser.add_argument("--real-serial-port")
     parser.add_argument("--real-baudrate", type=int)
     parser.add_argument("--real-udp-mode", choices=["udpin", "udpout"])
@@ -76,8 +79,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--real-udp-port", type=int)
     parser.add_argument("--real-tcp-host")
     parser.add_argument("--real-tcp-port", type=int)
+    parser.add_argument("--real-eth-mode", choices=["udpin", "udpout", "tcp"])
+    parser.add_argument("--real-eth-host")
+    parser.add_argument("--real-eth-port", type=int)
 
-    parser.add_argument("--sitl-connection-type", choices=["serial", "udp", "tcp"])
+    parser.add_argument("--sitl-connection-type", choices=["serial", "udp", "tcp", "eth"])
     parser.add_argument("--sitl-serial-port")
     parser.add_argument("--sitl-baudrate", type=int)
     parser.add_argument("--sitl-udp-mode", choices=["udpin", "udpout"])
@@ -85,6 +91,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sitl-udp-port", type=int)
     parser.add_argument("--sitl-tcp-host")
     parser.add_argument("--sitl-tcp-port", type=int)
+    parser.add_argument("--sitl-eth-mode", choices=["udpin", "udpout", "tcp"])
+    parser.add_argument("--sitl-eth-host")
+    parser.add_argument("--sitl-eth-port", type=int)
 
     parser.add_argument("--control-send-rate-hz", type=float)
     parser.add_argument("--action-cmd-retries", type=int)
@@ -141,6 +150,9 @@ def _build_endpoint(name: str, data: dict[str, Any]) -> EndpointConfig:
         udp_port=int(data.get("udp_port", 14550)),
         tcp_host=str(data.get("tcp_host", "127.0.0.1")),
         tcp_port=int(data.get("tcp_port", 5760)),
+        eth_mode=str(data.get("eth_mode", "udpin")),
+        eth_host=str(data.get("eth_host", "0.0.0.0")),
+        eth_port=int(data.get("eth_port", 14550)),
     )
 
 

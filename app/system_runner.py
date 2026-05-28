@@ -365,6 +365,8 @@ class SystemRunner:
                     "mission": self.latest_mission_name,
                     "stage": self.latest_mission_stage,
                     "stage_controller": self.latest_stage_controller,
+                    "stage_override": self.debug_runtime.config.force_mode,
+                    "stage_modes": self._web_stage_modes(),
                     "hold_reason": self.latest_hold_reason,
                     "controllers": asdict(self.controller_switches.snapshot()),
                     "events": list(self.system_events)[:40],
@@ -374,6 +376,14 @@ class SystemRunner:
         manager = self.services.link_manager
         snapshot["active_source"] = manager.get_active_source() if manager is not None else "none"
         return self._json_safe(snapshot)
+
+    def _web_stage_modes(self) -> list[str]:
+        mission_name = self.mission_runner.mission.name
+        if mission_name == "rescue_competition":
+            return ["AUTO", "IDLE", "CORRIDOR_FOLLOW", "OVERHEAD_HOLD"]
+        if mission_name == "visual_tracking":
+            return ["AUTO", "IDLE", "APPROACH_TRACK", "OVERHEAD_HOLD"]
+        return ["AUTO", "IDLE", "APPROACH_TRACK", "OVERHEAD_HOLD", "CORRIDOR_FOLLOW"]
 
     @classmethod
     def _json_safe(cls, value):

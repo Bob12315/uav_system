@@ -14,10 +14,13 @@ sitl:
   udp_port: 14550
   tcp_host: 127.0.0.1
   tcp_port: 5762
+  eth_mode: udpin
+  eth_host: 0.0.0.0
+  eth_port: 15001
 
 real:
-  # 真机推荐使用 serial 连接
-  connection_type: serial
+  # 真机可使用 serial 或 eth；ETH 直连 RK3588 网口时使用 eth
+  connection_type: eth
   serial_port: /dev/ttyUSB0
   baudrate: 57600
   udp_mode: udpin
@@ -25,6 +28,9 @@ real:
   udp_port: 14550
   tcp_host: 127.0.0.1
   tcp_port: 5762
+  eth_mode: udpin
+  eth_host: 0.0.0.0
+  eth_port: 15001
 
 # 连续控制命令最大发送频率，避免占满链路
 control_send_rate_hz: 10

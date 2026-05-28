@@ -162,8 +162,8 @@ MissionStage.update()
 职责：
 
 - 读取视频源。
-- 在 RK3588 NPU 上运行 RKNN INT8 YOLO 检测。
-- 为 RKNN 检测结果维护业务层使用的短时 `track_id`。
+- 调用 Ultralytics YOLO 官方 tracking。
+- 使用 ByteTrack。
 - 维护主目标。
 - 通过 UDP JSON 输出当前主目标。
 - 接收目标选择相关的简单命令。
@@ -228,4 +228,4 @@ MissionStage.update()
 禁止事项：
 
 - 单元测试不应要求真实飞控。
-- 单元测试不应要求 NPU、相机或 YOLO 模型。
+- 单元测试不应要求 GPU、相机或 YOLO 模型。

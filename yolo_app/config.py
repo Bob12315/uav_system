@@ -12,8 +12,11 @@ import yaml
 class AppConfig:
     model_path: str
     source: str
+    img_size: int
     conf_thres: float
     iou_thres: float
+    tracker: str
+    device: str
     classes: list[int]
     udp_ip: str
     udp_port: int
@@ -29,12 +32,6 @@ class AppConfig:
     command_ip: str
     command_port: int
     window_name: str
-    class_names: list[str]
-    camera_width: int
-    camera_height: int
-    camera_fps: int
-    camera_fourcc: str
-    latest_frame: bool
     fullscreen: bool
     web_stream_enabled: bool
     web_stream_host: str
@@ -59,8 +56,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default=str(Path(__file__).with_name("config.yaml")))
     parser.add_argument("--model-path")
     parser.add_argument("--source")
+    parser.add_argument("--img-size", type=int)
     parser.add_argument("--conf-thres", type=float)
     parser.add_argument("--iou-thres", type=float)
+    parser.add_argument("--tracker")
+    parser.add_argument("--device")
     parser.add_argument("--classes", nargs="*", type=int)
     parser.add_argument("--udp-ip")
     parser.add_argument("--udp-port", type=int)
@@ -76,13 +76,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--command-ip")
     parser.add_argument("--command-port", type=int)
     parser.add_argument("--window-name")
-    parser.add_argument("--class-names", nargs="*")
-    parser.add_argument("--camera-width", type=int)
-    parser.add_argument("--camera-height", type=int)
-    parser.add_argument("--camera-fps", type=int)
-    parser.add_argument("--camera-fourcc")
-    parser.add_argument("--latest-frame", type=_str_to_bool)
-    parser.add_argument("--fullscreen", type=_str_to_bool)
     return parser
 
 
@@ -120,8 +113,11 @@ def load_config() -> AppConfig:
     return AppConfig(
         model_path=_expand_user_path(merged["model_path"]),
         source=_expand_user_path(merged["source"]),
+        img_size=int(merged["img_size"]),
         conf_thres=float(merged["conf_thres"]),
         iou_thres=float(merged["iou_thres"]),
+        tracker=str(merged["tracker"]),
+        device=str(merged.get("device", "")),
         classes=list(merged.get("classes", [])),
         udp_ip=str(merged["udp_ip"]),
         udp_port=int(merged["udp_port"]),
@@ -137,12 +133,6 @@ def load_config() -> AppConfig:
         command_ip=str(merged.get("command_ip", "0.0.0.0")),
         command_port=int(merged.get("command_port", 5006)),
         window_name=str(merged.get("window_name", "YOLO Tracking")),
-        class_names=list(merged.get("class_names", ["Target", "bucket", "class_2"])),
-        camera_width=int(merged.get("camera_width", 640)),
-        camera_height=int(merged.get("camera_height", 480)),
-        camera_fps=int(merged.get("camera_fps", 30)),
-        camera_fourcc=str(merged.get("camera_fourcc", "MJPG")),
-        latest_frame=bool(merged.get("latest_frame", False)),
         fullscreen=bool(display_config.get("fullscreen", merged.get("fullscreen", False))),
         web_stream_enabled=bool(web_stream_config.get("enabled", False)),
         web_stream_host=str(web_stream_config.get("host", "0.0.0.0")),

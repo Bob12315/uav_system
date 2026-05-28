@@ -510,6 +510,9 @@ def load_telemetry_config(path: str) -> TelemetryConfig:
             udp_port=int(data.get("udp_port", 14550)),
             tcp_host=str(data.get("tcp_host", "127.0.0.1")),
             tcp_port=int(data.get("tcp_port", 5760)),
+            eth_mode=str(data.get("eth_mode", "udpin")),
+            eth_host=str(data.get("eth_host", "0.0.0.0")),
+            eth_port=int(data.get("eth_port", 14550)),
         )
 
     return TelemetryConfig(

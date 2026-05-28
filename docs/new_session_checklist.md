@@ -319,4 +319,4 @@ python -m telemetry_link.main --help
 - 禁止绕过 `FlightCommandExecutor`。
 - 禁止让 YOLO 进程连接 MAVLink。
 - 禁止让 telemetry_link 读取 YOLO 或计算控制律。
-- 禁止把 `.rknn`、日志、`__pycache__` 当功能改动提交。
+- 禁止把 `.pt`、日志、`__pycache__` 当功能改动提交。
