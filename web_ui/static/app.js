@@ -178,6 +178,25 @@ async function loadConfigFiles() {
   $("configFiles").innerHTML = files.map(path => `<button data-path="${path}">${path}</button>`).join("");
   $("configFiles").querySelectorAll("button").forEach(button => button.onclick = () => openConfig(button.dataset.path));
 }
+function startStatusUpdates() {
+  let fallbackTimer = null;
+  const pollStatus = () => json("/api/status").then(renderStatus).catch(error => {
+    $("completionHint").textContent = `状态刷新失败: ${error.message}`;
+  });
+  const startFallback = () => {
+    if (fallbackTimer !== null) return;
+    pollStatus();
+    fallbackTimer = setInterval(pollStatus, 500);
+  };
+  try {
+    const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/status`);
+    socket.onmessage = event => renderStatus(JSON.parse(event.data));
+    socket.onerror = startFallback;
+    socket.onclose = startFallback;
+  } catch {
+    startFallback();
+  }
+}
 async function openConfig(path) {
   const file = await json(`/api/config/file?path=${encodeURIComponent(path)}`);
   currentConfigPath = path;
@@ -269,7 +288,6 @@ async function init() {
   $("restartApp").onclick = () => confirm("重启 App 将关闭自动发送并暂时断开网页，确认？") && json("/api/services/app/restart", {method: "POST"}).then(loadAudit);
   completions = (await json("/api/commands/completions")).commands;
   await Promise.all([loadAudit(), loadMissions(), loadConfigFiles()]);
-  const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/status`);
-  socket.onmessage = event => renderStatus(JSON.parse(event.data));
+  startStatusUpdates();
 }
 init().catch(error => { $("completionHint").textContent = error.message; });
