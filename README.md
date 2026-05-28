@@ -156,3 +156,4 @@ python -m pytest -q
 - [docs/control_flow.md](docs/control_flow.md)：从 YOLO 到 MAVLink 的数据流。
 - [docs/safety.md](docs/safety.md)：安全边界和实机 checklist。
 - [docs/sitl_test_plan.md](docs/sitl_test_plan.md)：SITL 测试顺序。
+- [docs/rk3588_remote_sitl_gazebo.md](docs/rk3588_remote_sitl_gazebo.md)：本地 SITL/Gazebo 远程接入 RK3588 的配置和排查。

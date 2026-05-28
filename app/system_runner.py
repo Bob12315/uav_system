@@ -6,7 +6,7 @@ import subprocess
 import threading
 import time
 from collections import deque
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import yaml
@@ -175,7 +175,11 @@ class SystemRunner:
                     self.mission_runner.send_actions = bool(controller_enabled.send_commands)
                     mission = self.mission_runner.update(context)
                     mission = self.debug_runtime.apply_mission_override(mission)
-                    raw_command, mode_status = self._update_active_mode(mission.active_mode, inputs)
+                    controller_inputs = self._apply_mission_target_offset(inputs, mission)
+                    raw_command, mode_status = self._update_active_mode(
+                        mission.active_mode,
+                        controller_inputs,
+                    )
                     raw_command = self.debug_runtime.apply_command_override(raw_command)
                     raw_command = self._apply_controller_switches(raw_command)
                     raw_for_log = FlightCommand(
@@ -288,6 +292,25 @@ class SystemRunner:
             self.logger.warning("unknown mission stage controller %s; commanding zero", mode_name)
             return FlightCommand(valid=True), _Status(mode_name, False, False, "unknown_mode")
         return mode.update(inputs)
+
+    def _apply_mission_target_offset(self, inputs, mission):
+        detail = getattr(mission, "detail", {}) or {}
+        offset = detail.get("target_error_offset")
+        if not isinstance(offset, dict):
+            return inputs
+        ex_offset = float(offset.get("ex_cam", 0.0))
+        ey_offset = float(offset.get("ey_cam", 0.0))
+        if math.isclose(ex_offset, 0.0, abs_tol=1e-12) and math.isclose(
+            ey_offset,
+            0.0,
+            abs_tol=1e-12,
+        ):
+            return inputs
+        return replace(
+            inputs,
+            ex_cam=float(inputs.ex_cam) - ex_offset,
+            ey_cam=float(inputs.ey_cam) - ey_offset,
+        )
 
     def _apply_controller_switches(self, command: FlightCommand) -> FlightCommand:
         snapshot = self.controller_switches.snapshot()
