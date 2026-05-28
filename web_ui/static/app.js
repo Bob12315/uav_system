@@ -35,10 +35,22 @@ function cards(target, values) {
   target.innerHTML = Object.entries(values).map(([label, value]) =>
     `<div class="card"><label>${escapeHtml(label)}</label>${escapeHtml(value)}</div>`).join("");
 }
+function infoRows(target, rows) {
+  target.innerHTML = rows.map(([label, value]) =>
+    `<div class="info-label">${escapeHtml(label)}</div><div class="info-value">${escapeHtml(value)}</div>`
+  ).join("");
+}
+function num(value, digits = 2, unit = "") {
+  return Number.isFinite(Number(value)) ? `${Number(value).toFixed(digits)}${unit}` : "--";
+}
+function boolText(value, yes = "YES", no = "NO") {
+  return value ? yes : no;
+}
 function renderStatus(next) {
   state = next;
   const link = next.link || {};
   const drone = next.drone || {};
+  const gimbal = next.gimbal || {};
   const target = next.perception || {};
   const controls = next.controllers || {};
   setBadge($("sourceBadge"), `SOURCE ${String(next.active_source || "--").toUpperCase()}`, next.active_source === "real" ? "warning" : "");
@@ -51,11 +63,54 @@ function renderStatus(next) {
   $("targetCurrent").textContent = target.target_valid
     ? `当前锁定: ${target.class_name} #${target.track_id} (${Number(target.confidence).toFixed(2)})`
     : "当前锁定: --";
+  infoRows($("aircraftInfo"), [
+    ["数据源", `${String(next.active_source || "--").toUpperCase()} / ${link.status_text || "--"}`],
+    ["链路", `${boolText(link.connected, "OK", "DOWN")} ${link.transport || ""}`.trim()],
+    ["重连中", boolText(link.reconnecting)],
+    ["目标系统", `${link.target_system ?? "--"}:${link.target_component ?? "--"}`],
+    ["链路 RX/TX", `${stamp(link.last_rx_time)} / ${stamp(link.last_tx_time)}`],
+    ["链路超时", `${num(link.heartbeat_timeout_sec, 1, " s")} / ${num(link.rx_timeout_sec, 1, " s")}`],
+    ["飞控模式", drone.mode || "--"],
+    ["解锁", boolText(drone.armed, "ARMED", "DISARMED")],
+    ["控制允许", boolText(drone.control_allowed)],
+    ["状态过期", boolText(drone.stale)],
+    ["状态时间", stamp(drone.timestamp)],
+    ["心跳/接收", `${num(drone.hb_age_sec, 2, " s")} / ${num(drone.rx_age_sec, 2, " s")}`],
+    ["有效标志", `ATT:${+Boolean(drone.attitude_valid)} VEL:${+Boolean(drone.velocity_valid)} ALT:${+Boolean(drone.altitude_valid)}`],
+    ["定位标志", `G:${+Boolean(drone.global_position_valid)} R:${+Boolean(drone.relative_alt_valid)} L:${+Boolean(drone.local_position_valid)}`],
+    ["姿态 R/P/Y", `${num(drone.roll, 3)} / ${num(drone.pitch, 3)} / ${num(drone.yaw, 3)}`],
+    ["角速度 R/P/Y", `${num(drone.roll_rate, 3)} / ${num(drone.pitch_rate, 3)} / ${num(drone.yaw_rate, 3)}`],
+    ["速度 N/E/D", `${num(drone.vx, 2)} / ${num(drone.vy, 2)} / ${num(drone.vz, 2)}`],
+    ["速度源/质量", `${drone.velocity_source || "--"} / ${drone.velocity_quality || "--"}`],
+    ["本地位置", drone.local_position_valid ? `${num(drone.local_x, 2)} / ${num(drone.local_y, 2)} / ${num(drone.local_z, 2)}` : "--"],
+    ["高度 相对/海拔", `${num(drone.relative_altitude, 2, " m")} / ${num(drone.altitude, 2, " m")}`],
+    ["经纬度", drone.global_position_valid ? `${num(drone.lat, 7)}, ${num(drone.lon, 7)}` : "--"],
+    ["GPS", `${drone.gps_fix_type ?? "--"} fix / ${drone.satellites_visible ?? "--"} sats`],
+    ["GPS EPH/EPV", `${num(drone.gps_eph, 2)} / ${num(drone.gps_epv, 2)}`],
+    ["电池", drone.battery_valid ? `${num(drone.battery_voltage, 1, " V")} / ${drone.battery_remaining}%` : "--"],
+    ["云台有效", boolText(gimbal.gimbal_valid)],
+    ["云台 Y/P/R", gimbal.gimbal_valid ? `${num(gimbal.yaw, 3)} / ${num(gimbal.pitch, 3)} / ${num(gimbal.roll, 3)}` : "--"],
+    ["云台消息", gimbal.source_msg_type || "--"],
+    ["云台时间", stamp(gimbal.last_update_time || gimbal.timestamp)],
+    ["最新消息", drone.last_message_type || "--"],
+  ]);
   renderDetections(next.scene || {}, target);
   cards($("statusCards"), {
-    "飞控模式": drone.mode || "--", "解锁状态": drone.armed ? "ARMED" : "DISARMED",
-    "高度": `${Number(drone.relative_altitude || 0).toFixed(1)} m`,
+    "链路": `${link.status_text || "--"} / ${link.transport || "--"}`,
+    "心跳": link.connected ? `${num(drone.hb_age_sec, 2, " s")} ago` : "--",
+    "接收": link.connected ? `${num(drone.rx_age_sec, 2, " s")} ago` : "--",
+    "目标系统": `${link.target_system ?? "--"}:${link.target_component ?? "--"}`,
+    "飞控模式": drone.mode || "--",
+    "解锁状态": drone.armed ? "ARMED" : "DISARMED",
+    "姿态 R/P/Y": `${num(drone.roll, 3)} / ${num(drone.pitch, 3)} / ${num(drone.yaw, 3)}`,
+    "高度": `${num(drone.relative_altitude, 2, " m")} / ${num(drone.altitude, 2, " m")}`,
+    "速度 NED": `${num(drone.vx, 2)} / ${num(drone.vy, 2)} / ${num(drone.vz, 2)}`,
+    "本地位置": drone.local_position_valid ? `${num(drone.local_x, 2)} / ${num(drone.local_y, 2)} / ${num(drone.local_z, 2)}` : "--",
+    "GPS": `${drone.gps_fix_type ?? "--"} / ${drone.satellites_visible ?? "--"} sats`,
+    "经纬度": drone.global_position_valid ? `${num(drone.lat, 7)}, ${num(drone.lon, 7)}` : "--",
     "电池": drone.battery_valid ? `${Number(drone.battery_voltage).toFixed(1)} V / ${drone.battery_remaining}%` : "--",
+    "云台 Y/P/R": gimbal.gimbal_valid ? `${num(gimbal.yaw, 3)} / ${num(gimbal.pitch, 3)} / ${num(gimbal.roll, 3)}` : "--",
+    "最新消息": drone.last_message_type || "--",
     "Mission": next.mission || "--", "Stage": next.stage || "--",
     "Target": target.target_valid ? `${target.class_name} #${target.track_id}` : "--",
     "Hold": next.hold_reason || "none"
