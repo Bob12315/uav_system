@@ -13,6 +13,20 @@ dry_run_skip_vision: true
 dry_run_skip_payload_release: true
 search_drop_duration_s: 2.0
 align_drop_duration_s: 1.0
+drop:
+  required_payload_drops: 2
+  scan_direction: left_to_right
+  scan_height_m: 5.0
+  intermediate_height_m: 3.0
+  final_height_m: 1.0
+  ascend_height_m: 5.0
+  scan_width_m: 5.0
+  scan_speed_mps: 0.4
+  scan_timeout_s: 45.0
+  descend_hold_s: 0.3
+  stable_hold_s: 3.0
+  dropped_target_radius_m: 0.8
+  resume_skip_m: 0.6
 drop_target_classes:
   - drop_cylinder
   - cylinder
@@ -53,6 +67,15 @@ recce:
   output_dir: logs/recce
   output_json: true
   output_csv: true
+recon:
+  scan_height_m: 5.0
+  identify_height_m: 2.0
+  scan_width_m: 5.0
+  scan_speed_mps: 0.5
+  scan_timeout_s: 40.0
+  align_hold_s: 0.5
+  descend_hold_s: 0.5
+  reported_target_radius_m: 0.8
 land_complete_altitude_m: 0.3
 
 # Dry-run skeleton route in mission-local NED coordinates.
@@ -102,7 +125,19 @@ route:
     max_speed_mps: 0.8
 drop_zones: []
 recce_zones: []
-payloads: []
+payload_slots:
+  - id: 1
+    servo_channel: 9
+    release_pwm: 1900
+    hold_pwm: 1100
+    drop_center_x: 0.0
+    drop_center_y: 0.0
+  - id: 2
+    servo_channel: 10
+    release_pwm: 1900
+    hold_pwm: 1100
+    drop_center_x: 0.0
+    drop_center_y: 0.0
 
 input_adapter:
   dt_default: 0.02
