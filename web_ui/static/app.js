@@ -5,6 +5,7 @@ let history = [];
 let historyIndex = -1;
 let currentConfigPath = "";
 let currentOriginal = "";
+const fallbackStageModes = ["AUTO", "IDLE", "APPROACH_TRACK", "OVERHEAD_HOLD", "CORRIDOR_FOLLOW"];
 
 async function json(url, options = {}) {
   const response = await fetch(url, {headers: {"Content-Type": "application/json"}, ...options});
@@ -46,6 +47,58 @@ function num(value, digits = 2, unit = "") {
 function boolText(value, yes = "YES", no = "NO") {
   return value ? yes : no;
 }
+function setButtonActive(selector, predicate) {
+  document.querySelectorAll(selector).forEach(button => {
+    button.classList.toggle("active-choice", Boolean(predicate(button)));
+  });
+}
+function updateControlHighlights(next, drone, controls) {
+  const sendEnabled = Boolean(controls.send_commands);
+  $("sendToggle").classList.toggle("active-choice", sendEnabled);
+  $("sendToggleState").textContent = sendEnabled ? "ON" : "OFF";
+  setButtonActive("[data-mode]", button => (drone.mode || "").toUpperCase() === button.dataset.mode);
+  setButtonActive("[data-arm-state]", button =>
+    (button.dataset.armState === "armed" && drone.armed)
+    || (button.dataset.armState === "disarmed" && !drone.armed));
+  setButtonActive("[data-source]", button => button.dataset.source === next.active_source);
+  ["gimbal", "body", "approach"].forEach(name => {
+    const enabled = Boolean(controls[name]);
+    const row = document.querySelector(`[data-controller-row="${name}"]`);
+    if (!row) return;
+    row.classList.toggle("enabled", enabled);
+    row.querySelectorAll("button").forEach(button => {
+      const command = button.dataset.command || "";
+      button.classList.toggle("active-choice", command.endsWith(enabled ? " on" : " off"));
+    });
+  });
+  const allEnabled = Boolean(controls.gimbal && controls.body && controls.approach);
+  const allDisabled = Boolean(!controls.gimbal && !controls.body && !controls.approach);
+  const allRow = document.querySelector('[data-controller-row="all"]');
+  if (allRow) {
+    allRow.classList.toggle("enabled", allEnabled);
+    allRow.querySelectorAll("button").forEach(button => {
+      const command = button.dataset.command || "";
+      button.classList.toggle(
+        "active-choice",
+        (allEnabled && command.endsWith(" on")) || (allDisabled && command.endsWith(" off"))
+      );
+    });
+  }
+}
+function renderMissionSteps(next) {
+  const override = next.stage_override || "";
+  const active = override || next.stage_controller || next.stage || "";
+  const modes = Array.isArray(next.stage_modes) && next.stage_modes.length ? next.stage_modes : fallbackStageModes;
+  $("stageOverride").textContent = override || "AUTO";
+  $("missionSteps").innerHTML = modes.map(mode => {
+    const command = mode === "AUTO" ? "stage mode auto" : `stage mode ${mode}`;
+    const fixed = override && mode === override;
+    const current = !override && (mode === "AUTO" || mode === active);
+    return `<button class="${fixed ? "fixed" : ""} ${current ? "active-choice" : ""}" data-stage-mode="${mode}" data-command="${command}">${mode}</button>`;
+  }).join("");
+  $("missionSteps").querySelectorAll("[data-stage-mode]").forEach(button => button.onclick = () =>
+    execute(button.dataset.command, "STAGE"));
+}
 function renderStatus(next) {
   state = next;
   const link = next.link || {};
@@ -60,6 +113,8 @@ function renderStatus(next) {
   $("missionStage").textContent = next.stage || "--";
   $("stageController").textContent = next.stage_controller || "--";
   $("holdReason").textContent = next.hold_reason || "none";
+  updateControlHighlights(next, drone, controls);
+  renderMissionSteps(next);
   $("targetCurrent").textContent = target.target_valid
     ? `当前锁定: ${target.class_name} #${target.track_id} (${Number(target.confidence).toFixed(2)})`
     : "当前锁定: --";
@@ -80,35 +135,11 @@ function renderStatus(next) {
     ["Scene 时间", stamp(scene.timestamp || target.timestamp)],
   ]);
   infoRows($("aircraftInfo"), [
-    ["数据源", `${String(next.active_source || "--").toUpperCase()} / ${link.status_text || "--"}`],
-    ["链路", `${boolText(link.connected, "OK", "DOWN")} ${link.transport || ""}`.trim()],
-    ["重连中", boolText(link.reconnecting)],
-    ["目标系统", `${link.target_system ?? "--"}:${link.target_component ?? "--"}`],
-    ["链路 RX/TX", `${stamp(link.last_rx_time)} / ${stamp(link.last_tx_time)}`],
-    ["链路超时", `${num(link.heartbeat_timeout_sec, 1, " s")} / ${num(link.rx_timeout_sec, 1, " s")}`],
+    ["GPS", `${drone.gps_fix_type ?? "--"} fix / ${drone.satellites_visible ?? "--"} sats`],
+    ["电池", drone.battery_valid ? `${num(drone.battery_voltage, 1, " V")} / ${drone.battery_remaining}%` : "--"],
+    ["高度", `${num(drone.relative_altitude, 2, " m")} / ${num(drone.altitude, 2, " m")}`],
     ["飞控模式", drone.mode || "--"],
     ["解锁", boolText(drone.armed, "ARMED", "DISARMED")],
-    ["控制允许", boolText(drone.control_allowed)],
-    ["状态过期", boolText(drone.stale)],
-    ["状态时间", stamp(drone.timestamp)],
-    ["心跳/接收", `${num(drone.hb_age_sec, 2, " s")} / ${num(drone.rx_age_sec, 2, " s")}`],
-    ["有效标志", `ATT:${+Boolean(drone.attitude_valid)} VEL:${+Boolean(drone.velocity_valid)} ALT:${+Boolean(drone.altitude_valid)}`],
-    ["定位标志", `G:${+Boolean(drone.global_position_valid)} R:${+Boolean(drone.relative_alt_valid)} L:${+Boolean(drone.local_position_valid)}`],
-    ["姿态 R/P/Y", `${num(drone.roll, 3)} / ${num(drone.pitch, 3)} / ${num(drone.yaw, 3)}`],
-    ["角速度 R/P/Y", `${num(drone.roll_rate, 3)} / ${num(drone.pitch_rate, 3)} / ${num(drone.yaw_rate, 3)}`],
-    ["速度 N/E/D", `${num(drone.vx, 2)} / ${num(drone.vy, 2)} / ${num(drone.vz, 2)}`],
-    ["速度源/质量", `${drone.velocity_source || "--"} / ${drone.velocity_quality || "--"}`],
-    ["本地位置", drone.local_position_valid ? `${num(drone.local_x, 2)} / ${num(drone.local_y, 2)} / ${num(drone.local_z, 2)}` : "--"],
-    ["高度 相对/海拔", `${num(drone.relative_altitude, 2, " m")} / ${num(drone.altitude, 2, " m")}`],
-    ["经纬度", drone.global_position_valid ? `${num(drone.lat, 7)}, ${num(drone.lon, 7)}` : "--"],
-    ["GPS", `${drone.gps_fix_type ?? "--"} fix / ${drone.satellites_visible ?? "--"} sats`],
-    ["GPS EPH/EPV", `${num(drone.gps_eph, 2)} / ${num(drone.gps_epv, 2)}`],
-    ["电池", drone.battery_valid ? `${num(drone.battery_voltage, 1, " V")} / ${drone.battery_remaining}%` : "--"],
-    ["云台有效", boolText(gimbal.gimbal_valid)],
-    ["云台 Y/P/R", gimbal.gimbal_valid ? `${num(gimbal.yaw, 3)} / ${num(gimbal.pitch, 3)} / ${num(gimbal.roll, 3)}` : "--"],
-    ["云台消息", gimbal.source_msg_type || "--"],
-    ["云台时间", stamp(gimbal.last_update_time || gimbal.timestamp)],
-    ["最新消息", drone.last_message_type || "--"],
   ]);
   renderDetections(scene, target);
   cards($("statusCards"), {
