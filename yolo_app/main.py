@@ -83,7 +83,10 @@ def main() -> int:
             )
             udp_publisher.publish(current_target, scene)
 
-            if cfg.show or cfg.save_video or web_stream is not None:
+            if web_stream is not None:
+                web_stream.publish(frame)
+
+            if cfg.show or cfg.save_video:
                 annotated = annotator.annotate(
                     frame=frame,
                     tracks=tracks,
@@ -95,8 +98,6 @@ def main() -> int:
                     key = cv2.waitKey(1) & 0xFF
                     if key in {27, ord("q")}:
                         break
-                if web_stream is not None:
-                    web_stream.publish(annotated)
                 if cfg.save_video:
                     if writer is None:
                         fps = video_source.cap.get(cv2.CAP_PROP_FPS)

@@ -200,7 +200,7 @@ def _dispatch_mission_command(
             return CommandResult(False, "mission switching is not available in this UI")
         return mission_command_handler([])
     action = parts[1].lower()
-    if action not in {"list", "ls", "switch", "select", "use", "start", "reset", "current", "status"}:
+    if action not in {"list", "ls", "switch", "select", "use", "stage", "start", "reset", "current", "status"}:
         return None
     if mission_command_handler is None:
         return CommandResult(False, "mission switching is not available in this UI")

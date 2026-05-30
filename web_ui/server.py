@@ -80,6 +80,8 @@ def create_app(runner, config: UiConfig) -> FastAPI:
         commands = set(_COMMAND_COMPLETIONS)
         for mission in runner.web_missions():
             commands.add(f"mission switch {mission['name']}")
+            for stage in mission.get("stage_modes", []):
+                commands.add(f"mission stage {stage}")
         return {"commands": sorted(commands, key=str.lower)}
 
     @app.post("/api/commands/execute")

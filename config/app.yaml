@@ -22,7 +22,7 @@ ui:
 services_control:
   # Configure these after installing the corresponding systemd user services.
   restart_app_command: ["systemctl", "--user", "restart", "uav-app.service"]
-  restart_yolo_command: ["systemctl", "--user", "restart", "uav-yolo.service"]
+  restart_yolo_command: ["bash", "-lc", "source \"$(conda info --base)/etc/profile.d/conda.sh\" && conda activate yolo && exec python3 ~/uav_project/src/yolo_app/main.py --show false"]
 
 blackbox:
   enabled: true

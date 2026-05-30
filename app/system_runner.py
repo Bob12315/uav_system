@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import math
+import os
+import signal
 import subprocess
 import threading
 import time
@@ -79,6 +81,7 @@ class SystemRunner:
         self.web_server = None
         self.system_events: deque[dict[str, object]] = deque(maxlen=160)
         self.latest_snapshot: dict[str, object] = {}
+        self.external_processes: dict[str, subprocess.Popen] = {}
 
     def run(self) -> None:
         self.services.start()
@@ -108,6 +111,7 @@ class SystemRunner:
             self.web_server.stop()
             self.web_server = None
         self.services.stop()
+        self._stop_external_processes()
         self.logger.info("app runtime stopped")
 
     def _run_with_ui(self) -> None:
@@ -369,6 +373,7 @@ class SystemRunner:
                     "stage_modes": self._web_stage_modes(),
                     "hold_reason": self.latest_hold_reason,
                     "controllers": asdict(self.controller_switches.snapshot()),
+                    "control_commands": list(self.control_command_log)[:40],
                     "events": list(self.system_events)[:40],
                     "actions": self.mission_runner.get_action_log_lines()[:20],
                 }
@@ -380,10 +385,12 @@ class SystemRunner:
     def _web_stage_modes(self) -> list[str]:
         mission_name = self.mission_runner.mission.name
         if mission_name == "rescue_competition":
-            return ["AUTO", "IDLE", "CORRIDOR_FOLLOW", "OVERHEAD_HOLD"]
+            from missions.rescue_competition.mission import RescueStage
+
+            return list(dict.fromkeys(["AUTO", *[stage.value for stage in RescueStage]]))
         if mission_name == "visual_tracking":
-            return ["AUTO", "IDLE", "APPROACH_TRACK", "OVERHEAD_HOLD"]
-        return ["AUTO", "IDLE", "APPROACH_TRACK", "OVERHEAD_HOLD", "CORRIDOR_FOLLOW"]
+            return ["AUTO", "IDLE", "APPROACH_TRACK", "OVERHEAD_HOLD", "CORRIDOR_FOLLOW"]
+        return ["AUTO", "IDLE"]
 
     @classmethod
     def _json_safe(cls, value):
@@ -441,9 +448,23 @@ class SystemRunner:
     def web_missions(self) -> list[dict[str, object]]:
         active = self.mission_runner.mission.name
         return [
-            {"name": name, "active": name == active, "config_path": f"missions/{name}/config.yaml"}
+            {
+                "name": name,
+                "active": name == active,
+                "config_path": f"missions/{name}/config.yaml",
+                "stage_modes": self._web_stage_modes_for_mission(name),
+            }
             for name in available_mission_names()
         ]
+
+    def _web_stage_modes_for_mission(self, mission_name: str) -> list[str]:
+        if mission_name == "rescue_competition":
+            from missions.rescue_competition.mission import RescueStage
+
+            return list(dict.fromkeys([stage.value for stage in RescueStage]))
+        if mission_name == "visual_tracking":
+            return ["IDLE", "APPROACH_TRACK", "OVERHEAD_HOLD", "CORRIDOR_FOLLOW"]
+        return []
 
     def apply_active_mission_config(self, relative_path: str) -> CommandResult:
         active_path = f"missions/{self.mission_runner.mission.name}/config.yaml"
@@ -497,11 +518,30 @@ class SystemRunner:
         if service == "app":
             self.disable_automatic_sending("app_restart")
         try:
-            subprocess.Popen(command)
+            self._stop_external_process(service)
+            process = subprocess.Popen(command, start_new_session=True)
         except OSError as exc:
             return CommandResult(False, f"failed to restart {service}: {exc}")
+        self.external_processes[service] = process
         self._record_event("SERVICE", f"{service} restart requested")
-        return CommandResult(True, f"{service} restart requested")
+        return CommandResult(True, f"{service} restart requested pid={process.pid}")
+
+    def _stop_external_processes(self) -> None:
+        for service in list(self.external_processes):
+            self._stop_external_process(service)
+
+    def _stop_external_process(self, service: str) -> None:
+        process = self.external_processes.pop(service, None)
+        if process is None or process.poll() is not None:
+            return
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+            process.wait(timeout=3.0)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                pass
 
     def _get_mission_control_lines(self) -> list[str]:
         with self.control_command_log_lock:
@@ -538,7 +578,7 @@ class SystemRunner:
         if not parts:
             return CommandResult(
                 False,
-                "format: mission list | mission switch <name> | mission start | mission reset | mission current",
+                "format: mission list | mission switch <name> | mission stage <name> | mission start | mission reset | mission current",
             )
         action = parts[0].lower()
         if action in {"list", "ls"}:
@@ -549,6 +589,23 @@ class SystemRunner:
             )
         if action in {"current", "status"}:
             return CommandResult(True, f"active mission={self.mission_runner.mission.name}")
+        if action == "stage":
+            if len(parts) != 2:
+                return CommandResult(False, "format: mission stage <stage_name>")
+            setter = getattr(self.mission_runner.mission, "set_stage", None)
+            if not callable(setter):
+                return CommandResult(False, f"mission stage unsupported: {self.mission_runner.mission.name}")
+            stage_name = parts[1].strip().upper()
+            try:
+                with self.runtime_config_lock:
+                    setter(stage_name)
+                    self.debug_runtime.config.force_mode = None
+                    self.stage_registry.reset_all()
+                with self.control_command_log_lock:
+                    self.latest_mission_stage = stage_name
+                return CommandResult(True, f"mission stage set: {stage_name}")
+            except Exception as exc:
+                return CommandResult(False, f"mission stage failed: {exc}")
         if action == "start":
             starter = getattr(self.mission_runner.mission, "start", None)
             if not callable(starter):
@@ -569,7 +626,7 @@ class SystemRunner:
             return self._switch_mission(parts[1])
         return CommandResult(
             False,
-            "format: mission list | mission switch <name> | mission start | mission reset | mission current",
+            "format: mission list | mission switch <name> | mission stage <name> | mission start | mission reset | mission current",
         )
 
     def _switch_mission(self, mission_name: str) -> CommandResult:

@@ -37,6 +37,14 @@ class VisualTrackingMission:
         self._overhead_entry_since = None
         self._overhead_entry_size = None
 
+    def set_stage(self, stage: str) -> None:
+        normalized = self._mode_value(stage).strip().upper()
+        if normalized not in {"APPROACH_TRACK", "OVERHEAD_HOLD", "CORRIDOR_FOLLOW", "IDLE"}:
+            raise ValueError("visual_tracking stage must be APPROACH_TRACK, OVERHEAD_HOLD, CORRIDOR_FOLLOW, or IDLE")
+        self._active_mode = normalized
+        self._overhead_entry_since = None
+        self._overhead_entry_size = None
+
     def update(self, context: MissionContext) -> MissionOutput:
         inputs = context.inputs
         health = context.health

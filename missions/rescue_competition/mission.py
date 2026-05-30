@@ -295,6 +295,10 @@ class RescueCompetitionMission:
     def start(self) -> None:
         self._start_requested = True
 
+    def set_stage(self, stage: str) -> None:
+        self._transition_to(self._stage_value(stage))
+        self._start_requested = False
+
     def update(self, context: MissionContext) -> MissionOutput:
         previous = self._stage
         self._ensure_stage_started(context)

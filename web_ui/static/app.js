@@ -1,11 +1,206 @@
 const $ = id => document.getElementById(id);
+
 let state = {};
 let completions = [];
 let history = [];
 let historyIndex = -1;
-let currentConfigPath = "";
-let currentOriginal = "";
-const fallbackStageModes = ["AUTO", "IDLE", "APPROACH_TRACK", "OVERHEAD_HOLD", "CORRIDOR_FOLLOW"];
+let missionCatalog = [];
+let allConfigFiles = [];
+let missionConfigPath = "";
+let missionConfigOriginal = "";
+let systemConfigPath = "";
+let systemConfigOriginal = "";
+let lang = localStorage.getItem("uav_ui_lang") || "zh";
+
+const i18n = {
+  zh: {
+    controlNav: "实时控制",
+    controlTitle: "实时控制",
+    mission: "任务",
+    switchMission: "切换任务",
+    listMissions: "列出任务",
+    startMission: "开始任务",
+    resetMission: "重置任务",
+    stage: "阶段",
+    autoStage: "自动阶段",
+    flightCommands: "飞控命令",
+    switchMode: "切换模式",
+    takeoff: "起飞",
+    arm: "解锁",
+    land: "降落",
+    stop: "停止",
+    controlSwitches: "控制开关",
+    controlSend: "控制发送",
+    gimbal: "云台",
+    body: "机体",
+    approach: "接近",
+    services: "服务",
+    startYolo: "启动 YOLO",
+    target: "目标",
+    prevTarget: "上一个",
+    nextTarget: "下一个",
+    unlockTarget: "解除锁定",
+    waitingVideo: "等待 YOLO Web 视频流",
+    droneCommands: "发往无人机的命令",
+    status: "状态",
+    aircraftInfo: "飞机信息",
+    targetInfo: "目标信息",
+    missionStatus: "任务状态",
+    commandLine: "命令行",
+    commandPlaceholder: "输入命令，Tab 补全，↑ ↓ 历史",
+    send: "发送",
+    completionHint: "Tab 补全 / ↑ ↓ 查看输入记录",
+    missionParams: "飞行模式参数",
+    systemParams: "系统参数",
+    reload: "读取",
+    save: "保存",
+    saveApply: "保存并应用",
+    saveAction: "保存并执行动作",
+    selectMissionConfig: "选择 missions 里的配置文件。",
+    selectSystemConfig: "选择 config 或 yolo_app 配置文件。",
+    systemConfigHint: "系统参数通常需要重启 app / YOLO 或重连 telemetry 才会生效。",
+    readOk: "已读取。",
+    hasBackup: "存在上一次保存前版本，可恢复。",
+    noChange: "没有修改。",
+    modified: "已修改配置；保存后后端会校验 YAML 并返回正式差异。",
+    noCommandLog: "暂无控制命令。",
+    fallbackEvents: "暂无控制命令，显示系统事件。",
+    confirmStartMission: "确认开始当前任务？",
+    confirmResetMission: "重置任务会关闭自动发送，确认？",
+    confirmArm: "确认解锁飞行器？",
+    confirmDisarm: "强制 Disarm 可能导致坠落，确认发送？",
+    confirmLand: "确认降落？",
+    confirmTakeoff: altitude => `确认起飞至 ${altitude} m？`,
+    confirmSendOn: "确认开启自动控制命令发送？请确认链路、模式和参数安全。",
+    confirmMissionApply: "保存并应用任务参数会关闭自动发送，确认？",
+    confirmSystemApply: "保存并执行动作可能会重启服务或重连 telemetry，确认？",
+    complete: match => `补全: ${match}`,
+    refreshFailed: message => `状态刷新失败: ${message}`,
+    labels: {
+      link: "链路",
+      flightMode: "飞控模式",
+      armed: "解锁",
+      battery: "电池",
+      gps: "GPS",
+      globalPosition: "经纬度",
+      altitude: "高度",
+      velocity: "速度 NED",
+      gimbalYpr: "云台 Y/P/R",
+      targetState: "目标状态",
+      trackId: "Track ID",
+      classConfidence: "类别/置信度",
+      frame: "Frame",
+      detections: "检测数",
+      imageSize: "图像尺寸",
+      error: "误差 ex/ey",
+      targetSize: "目标尺寸",
+    },
+  },
+  en: {
+    controlNav: "Live Control",
+    controlTitle: "Live Control",
+    mission: "Mission",
+    switchMission: "Switch Mission",
+    listMissions: "List Missions",
+    startMission: "Start Mission",
+    resetMission: "Reset Mission",
+    stage: "Stage",
+    autoStage: "Auto Stage",
+    flightCommands: "Flight Commands",
+    switchMode: "Set Mode",
+    takeoff: "Takeoff",
+    arm: "Arm",
+    land: "Land",
+    stop: "Stop",
+    controlSwitches: "Control Switches",
+    controlSend: "Command Send",
+    gimbal: "Gimbal",
+    body: "Body",
+    approach: "Approach",
+    services: "Services",
+    startYolo: "Start YOLO",
+    target: "Target",
+    prevTarget: "Previous",
+    nextTarget: "Next",
+    unlockTarget: "Unlock",
+    waitingVideo: "Waiting for YOLO web stream",
+    droneCommands: "Commands Sent to Drone",
+    status: "Status",
+    aircraftInfo: "Aircraft",
+    targetInfo: "Target",
+    missionStatus: "Mission Status",
+    commandLine: "Command",
+    commandPlaceholder: "Type a command, Tab completes, ↑ ↓ history",
+    send: "Send",
+    completionHint: "Tab completion / ↑ ↓ command history",
+    missionParams: "Flight Mode Params",
+    systemParams: "System Params",
+    reload: "Reload",
+    save: "Save",
+    saveApply: "Save and Apply",
+    saveAction: "Save and Run Action",
+    selectMissionConfig: "Select a config file under missions.",
+    selectSystemConfig: "Select a config or yolo_app file.",
+    systemConfigHint: "System params usually require app / YOLO restart or telemetry reconnect.",
+    readOk: "Loaded.",
+    hasBackup: "A pre-save backup exists and can be restored.",
+    noChange: "No changes.",
+    modified: "Config changed; after saving, the backend validates YAML and returns the official diff.",
+    noCommandLog: "No control commands yet.",
+    fallbackEvents: "No control commands yet; showing system events.",
+    confirmStartMission: "Start the current mission?",
+    confirmResetMission: "Resetting the mission disables automatic sending. Continue?",
+    confirmArm: "Arm the aircraft?",
+    confirmDisarm: "Forced disarm may crash the aircraft. Send anyway?",
+    confirmLand: "Land now?",
+    confirmTakeoff: altitude => `Take off to ${altitude} m?`,
+    confirmSendOn: "Enable automatic command sending? Confirm link, mode, and params are safe.",
+    confirmMissionApply: "Saving and applying mission params disables automatic sending. Continue?",
+    confirmSystemApply: "Saving and applying may restart services or reconnect telemetry. Continue?",
+    complete: match => `Completed: ${match}`,
+    refreshFailed: message => `Status refresh failed: ${message}`,
+    labels: {
+      link: "Link",
+      flightMode: "Mode",
+      armed: "Armed",
+      battery: "Battery",
+      gps: "GPS",
+      globalPosition: "Lat/Lon",
+      altitude: "Altitude",
+      velocity: "Velocity NED",
+      gimbalYpr: "Gimbal Y/P/R",
+      targetState: "Target State",
+      trackId: "Track ID",
+      classConfidence: "Class/Confidence",
+      frame: "Frame",
+      detections: "Detections",
+      imageSize: "Image Size",
+      error: "Error ex/ey",
+      targetSize: "Target Size",
+    },
+  },
+};
+
+function t(key, ...args) {
+  const value = i18n[lang]?.[key] ?? i18n.zh[key] ?? key;
+  return typeof value === "function" ? value(...args) : value;
+}
+
+function label(key) {
+  return i18n[lang]?.labels?.[key] ?? i18n.zh.labels[key] ?? key;
+}
+
+function applyLanguage() {
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+  document.querySelectorAll("[data-i18n]").forEach(element => {
+    element.textContent = t(element.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(element => {
+    element.setAttribute("placeholder", t(element.dataset.i18nPlaceholder));
+  });
+  $("completionHint").textContent = t("completionHint");
+  if (state && Object.keys(state).length) renderStatus(state);
+}
 
 async function json(url, options = {}) {
   const response = await fetch(url, {headers: {"Content-Type": "application/json"}, ...options});
@@ -13,54 +208,46 @@ async function json(url, options = {}) {
   if (!response.ok) throw new Error(data.detail || "request failed");
   return data;
 }
+
 function stamp(seconds) {
   return seconds ? new Date(seconds * 1000).toLocaleTimeString() : "--";
 }
+
 function escapeHtml(text) {
-  return String(text ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return String(text ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
+
+function num(value, digits = 2, unit = "") {
+  return Number.isFinite(Number(value)) ? `${Number(value).toFixed(digits)}${unit}` : "--";
+}
+
 async function execute(command, source = "BUTTON") {
-  if (!command) return;
+  if (!command) return null;
   const result = await json("/api/commands/execute", {
-    method: "POST", body: JSON.stringify({command, source})
+    method: "POST",
+    body: JSON.stringify({command, source}),
   });
   $("completionHint").textContent = result.message;
   await loadAudit();
   return result;
 }
-function setBadge(element, text, cls) {
+
+function setBadge(element, text, cls = "") {
   element.textContent = text;
-  element.className = `badge ${cls || ""}`;
+  element.className = `badge ${cls}`;
 }
-function cards(target, values) {
-  target.innerHTML = Object.entries(values).map(([label, value]) =>
-    `<div class="card"><label>${escapeHtml(label)}</label>${escapeHtml(value)}</div>`).join("");
+
+function setSwitch(id, enabled) {
+  const button = $(id);
+  button.classList.toggle("active-choice", Boolean(enabled));
+  button.querySelector("strong").textContent = enabled ? "ON" : "OFF";
 }
-function infoRows(target, rows) {
-  target.innerHTML = rows.map(([label, value]) =>
-    `<div class="info-label">${escapeHtml(label)}</div><div class="info-value">${escapeHtml(value)}</div>`
-  ).join("");
-}
-function num(value, digits = 2, unit = "") {
-  return Number.isFinite(Number(value)) ? `${Number(value).toFixed(digits)}${unit}` : "--";
-}
-function boolText(value, yes = "YES", no = "NO") {
-  return value ? yes : no;
-}
-function setButtonActive(selector, predicate) {
-  document.querySelectorAll(selector).forEach(button => {
-    button.classList.toggle("active-choice", Boolean(predicate(button)));
-  });
-}
-function updateControlHighlights(next, drone, controls) {
-  const sendEnabled = Boolean(controls.send_commands);
-  $("sendToggle").classList.toggle("active-choice", sendEnabled);
-  $("sendToggleState").textContent = sendEnabled ? "ON" : "OFF";
-  setButtonActive("[data-mode]", button => (drone.mode || "").toUpperCase() === button.dataset.mode);
-  setButtonActive("[data-arm-state]", button =>
-    (button.dataset.armState === "armed" && drone.armed)
-    || (button.dataset.armState === "disarmed" && !drone.armed));
-  setButtonActive("[data-source]", button => button.dataset.source === next.active_source);
+
+function updateControllerRows(controls) {
   ["gimbal", "body", "approach"].forEach(name => {
     const enabled = Boolean(controls[name]);
     const row = document.querySelector(`[data-controller-row="${name}"]`);
@@ -74,161 +261,211 @@ function updateControlHighlights(next, drone, controls) {
   const allEnabled = Boolean(controls.gimbal && controls.body && controls.approach);
   const allDisabled = Boolean(!controls.gimbal && !controls.body && !controls.approach);
   const allRow = document.querySelector('[data-controller-row="all"]');
-  if (allRow) {
-    allRow.classList.toggle("enabled", allEnabled);
-    allRow.querySelectorAll("button").forEach(button => {
-      const command = button.dataset.command || "";
-      button.classList.toggle(
-        "active-choice",
-        (allEnabled && command.endsWith(" on")) || (allDisabled && command.endsWith(" off"))
-      );
-    });
-  }
+  if (!allRow) return;
+  allRow.classList.toggle("enabled", allEnabled);
+  allRow.querySelectorAll("button").forEach(button => {
+    const command = button.dataset.command || "";
+    button.classList.toggle(
+      "active-choice",
+      (allEnabled && command.endsWith(" on")) || (allDisabled && command.endsWith(" off")),
+    );
+  });
 }
-function renderMissionSteps(next) {
-  const override = next.stage_override || "";
-  const active = override || next.stage_controller || next.stage || "";
-  const modes = Array.isArray(next.stage_modes) && next.stage_modes.length ? next.stage_modes : fallbackStageModes;
-  $("stageOverride").textContent = override || "AUTO";
-  $("missionSteps").innerHTML = modes.map(mode => {
-    const command = mode === "AUTO" ? "stage mode auto" : `stage mode ${mode}`;
-    const fixed = override && mode === override;
-    const current = !override && (mode === "AUTO" || mode === active);
-    return `<button class="${fixed ? "fixed" : ""} ${current ? "active-choice" : ""}" data-stage-mode="${mode}" data-command="${command}">${mode}</button>`;
-  }).join("");
-  $("missionSteps").querySelectorAll("[data-stage-mode]").forEach(button => button.onclick = () =>
-    execute(button.dataset.command, "STAGE"));
+
+function cardHtml(label, value) {
+  return `<div class="card"><label>${escapeHtml(label)}</label>${escapeHtml(value)}</div>`;
 }
+
+function infoRows(target, rows) {
+  target.innerHTML = rows.map(([label, value]) =>
+    `<div class="info-label">${escapeHtml(label)}</div><div class="info-value">${escapeHtml(value)}</div>`
+  ).join("");
+}
+
 function renderStatus(next) {
   state = next;
   const link = next.link || {};
   const drone = next.drone || {};
   const gimbal = next.gimbal || {};
   const target = next.perception || {};
+  const scene = next.scene || {};
   const controls = next.controllers || {};
+  const cmd = next.command || {};
+
   setBadge($("sourceBadge"), `SOURCE ${String(next.active_source || "--").toUpperCase()}`, next.active_source === "real" ? "warning" : "");
   setBadge($("linkBadge"), `LINK ${link.connected ? "OK" : "DOWN"}`, link.connected ? "ok" : "danger");
+  setBadge($("modeBadge"), `MODE ${drone.mode || "--"}`, "");
+  setBadge($("armedBadge"), drone.armed ? "ARMED" : "DISARMED", drone.armed ? "danger" : "");
+  setBadge($("batteryBadge"), drone.battery_valid ? `BAT ${drone.battery_remaining}%` : "BAT --", "");
   setBadge($("sendBadge"), `SEND ${controls.send_commands ? "ON" : "OFF"}`, controls.send_commands ? "danger" : "ok");
+
+  setSwitch("sendToggle", controls.send_commands);
+  updateControllerRows(controls);
+
   $("missionName").textContent = next.mission || "--";
   $("missionStage").textContent = next.stage || "--";
   $("stageController").textContent = next.stage_controller || "--";
+  $("stageOverride").textContent = next.stage_override || "AUTO";
   $("holdReason").textContent = next.hold_reason || "none";
-  updateControlHighlights(next, drone, controls);
-  renderMissionSteps(next);
-  $("targetCurrent").textContent = target.target_valid
-    ? `当前锁定: ${target.class_name} #${target.track_id} (${Number(target.confidence).toFixed(2)})`
-    : "当前锁定: --";
-  const scene = next.scene || {};
-  const detections = scene.detections || [];
-  infoRows($("targetInfo"), [
-    ["目标状态", target.target_valid ? "LOCKED" : (target.tracking_state || "--").toUpperCase()],
-    ["Track ID", target.target_valid ? `#${target.track_id}` : "--"],
-    ["类别/置信度", target.target_valid ? `${target.class_name || "--"} / ${num(target.confidence, 2)}` : "--"],
-    ["Frame", `${scene.frame_id ?? target.frame_id ?? "--"}`],
-    ["检测数", `${detections.length}`],
-    ["图像尺寸", `${scene.image_width || target.image_width || "--"} x ${scene.image_height || target.image_height || "--"}`],
-    ["中心 cx/cy", target.target_valid ? `${num(target.cx, 1)} / ${num(target.cy, 1)}` : "--"],
-    ["框 w/h", target.target_valid ? `${num(target.w, 1)} / ${num(target.h, 1)}` : "--"],
-    ["误差 ex/ey", target.target_valid ? `${num(target.ex, 3)} / ${num(target.ey, 3)}` : "--"],
-    ["目标尺寸", target.target_valid ? num(target.target_size, 3) : "--"],
-    ["丢失计数", `${target.lost_count ?? "--"}`],
-    ["Scene 时间", stamp(scene.timestamp || target.timestamp)],
-  ]);
+
   infoRows($("aircraftInfo"), [
-    ["GPS", `${drone.gps_fix_type ?? "--"} fix / ${drone.satellites_visible ?? "--"} sats`],
-    ["电池", drone.battery_valid ? `${num(drone.battery_voltage, 1, " V")} / ${drone.battery_remaining}%` : "--"],
-    ["高度", `${num(drone.relative_altitude, 2, " m")} / ${num(drone.altitude, 2, " m")}`],
-    ["飞控模式", drone.mode || "--"],
-    ["解锁", boolText(drone.armed, "ARMED", "DISARMED")],
+    [label("gps"), `${drone.gps_fix_type ?? "--"} fix / ${drone.satellites_visible ?? "--"} sats`],
+    [label("battery"), drone.battery_valid ? `${num(drone.battery_voltage, 1, " V")} / ${drone.battery_remaining}%` : "--"],
+    [label("altitude"), `${num(drone.relative_altitude, 2, " m")} / ${num(drone.altitude, 2, " m")}`],
+    [label("flightMode"), drone.mode || "--"],
+    [label("armed"), drone.armed ? "ARMED" : "DISARMED"],
   ]);
-  renderDetections(scene, target);
-  cards($("statusCards"), {
-    "链路": `${link.status_text || "--"} / ${link.transport || "--"}`,
-    "心跳": link.connected ? `${num(drone.hb_age_sec, 2, " s")} ago` : "--",
-    "接收": link.connected ? `${num(drone.rx_age_sec, 2, " s")} ago` : "--",
-    "目标系统": `${link.target_system ?? "--"}:${link.target_component ?? "--"}`,
-    "飞控模式": drone.mode || "--",
-    "解锁状态": drone.armed ? "ARMED" : "DISARMED",
-    "姿态 R/P/Y": `${num(drone.roll, 3)} / ${num(drone.pitch, 3)} / ${num(drone.yaw, 3)}`,
-    "高度": `${num(drone.relative_altitude, 2, " m")} / ${num(drone.altitude, 2, " m")}`,
-    "速度 NED": `${num(drone.vx, 2)} / ${num(drone.vy, 2)} / ${num(drone.vz, 2)}`,
-    "本地位置": drone.local_position_valid ? `${num(drone.local_x, 2)} / ${num(drone.local_y, 2)} / ${num(drone.local_z, 2)}` : "--",
-    "GPS": `${drone.gps_fix_type ?? "--"} / ${drone.satellites_visible ?? "--"} sats`,
-    "经纬度": drone.global_position_valid ? `${num(drone.lat, 7)}, ${num(drone.lon, 7)}` : "--",
-    "电池": drone.battery_valid ? `${Number(drone.battery_voltage).toFixed(1)} V / ${drone.battery_remaining}%` : "--",
-    "云台 Y/P/R": gimbal.gimbal_valid ? `${num(gimbal.yaw, 3)} / ${num(gimbal.pitch, 3)} / ${num(gimbal.roll, 3)}` : "--",
-    "最新消息": drone.last_message_type || "--",
-    "Mission": next.mission || "--", "Stage": next.stage || "--",
-    "Target": target.target_valid ? `${target.class_name} #${target.track_id}` : "--",
-    "Hold": next.hold_reason || "none"
-  });
-  const cmd = next.command || {};
-  cards($("commandCards"), {
-    "VX": Number(cmd.vx_cmd || 0).toFixed(3), "VY": Number(cmd.vy_cmd || 0).toFixed(3),
-    "VZ": Number(cmd.vz_cmd || 0).toFixed(3), "Yaw": Number(cmd.yaw_rate_cmd || 0).toFixed(3),
-    "Gimbal Y": Number(cmd.gimbal_yaw_rate_cmd || 0).toFixed(3),
-    "Gimbal P": Number(cmd.gimbal_pitch_rate_cmd || 0).toFixed(3),
-    "Active": String(Boolean(cmd.active)), "SEND": controls.send_commands ? "ON" : "OFF"
-  });
-  $("events").innerHTML = (next.events || []).map(item =>
-    `<div class="log-line">${stamp(item.timestamp)} ${escapeHtml(item.level)} &nbsp; ${escapeHtml(item.message)}</div>`).join("");
-}
-function renderDetections(scene, target) {
-  $("frameId").textContent = scene.frame_id ?? "--";
-  const detections = scene.detections || [];
-  $("detCount").textContent = detections.length;
-  $("detections").innerHTML = detections.map(det => {
-    const locked = target.target_valid && det.track_id === target.track_id;
-    return `<button class="detection ${locked ? "locked" : ""}" data-track="${det.track_id}">
-      <span>#${det.track_id} ${escapeHtml(det.class_name)}</span><span>${Number(det.confidence).toFixed(2)}</span></button>`;
-  }).join("") || `<div class="hint">暂无目标</div>`;
-  $("detections").querySelectorAll("[data-track]").forEach(button => button.onclick = () =>
-    execute(`target lock ${button.dataset.track}`, "LIST"));
-}
-function clickVideo(event) {
-  const scene = state.scene || {};
-  const img = $("video");
-  if (!scene.image_width || !scene.image_height) return;
-  const rect = img.getBoundingClientRect();
-  const sourceRatio = scene.image_width / scene.image_height;
-  const boxRatio = rect.width / rect.height;
-  const shownWidth = sourceRatio > boxRatio ? rect.width : rect.height * sourceRatio;
-  const shownHeight = sourceRatio > boxRatio ? rect.width / sourceRatio : rect.height;
-  const offsetX = (rect.width - shownWidth) / 2;
-  const offsetY = (rect.height - shownHeight) / 2;
-  const displayX = event.clientX - rect.left - offsetX;
-  const displayY = event.clientY - rect.top - offsetY;
-  if (displayX < 0 || displayY < 0 || displayX > shownWidth || displayY > shownHeight) return;
-  const x = displayX * scene.image_width / shownWidth;
-  const y = displayY * scene.image_height / shownHeight;
-  const hits = (scene.detections || []).filter(d => x >= d.x1 && x <= d.x2 && y >= d.y1 && y <= d.y2);
-  if (!hits.length) {
-    $("completionHint").textContent = "点击位置没有可锁定目标";
-    return;
+
+  infoRows($("targetInfo"), [
+    [label("targetState"), target.target_valid ? "LOCKED" : (target.tracking_state || "--").toUpperCase()],
+    [label("trackId"), target.target_valid ? `#${target.track_id}` : "--"],
+    [label("classConfidence"), target.target_valid ? `${target.class_name || "--"} / ${num(target.confidence, 2)}` : "--"],
+    [label("frame"), `${scene.frame_id ?? target.frame_id ?? "--"}`],
+    [label("detections"), `${(scene.detections || []).length}`],
+    [label("imageSize"), `${scene.image_width || target.image_width || "--"} x ${scene.image_height || target.image_height || "--"}`],
+    [label("error"), target.target_valid ? `${num(target.ex, 3)} / ${num(target.ey, 3)}` : "--"],
+    [label("targetSize"), target.target_valid ? num(target.target_size, 3) : "--"],
+  ]);
+
+  $("commandCards").innerHTML = [
+    cardHtml("VX", num(cmd.vx_cmd || 0, 3)),
+    cardHtml("VY", num(cmd.vy_cmd || 0, 3)),
+    cardHtml("VZ", num(cmd.vz_cmd || 0, 3)),
+    cardHtml("Yaw", num(cmd.yaw_rate_cmd || 0, 3)),
+    cardHtml("Gimbal Y", num(cmd.gimbal_yaw_rate_cmd || 0, 3)),
+    cardHtml("Gimbal P", num(cmd.gimbal_pitch_rate_cmd || 0, 3)),
+    cardHtml("Active", String(Boolean(cmd.active))),
+    cardHtml("SEND", controls.send_commands ? "ON" : "OFF"),
+  ].join("");
+
+  const commandLines = next.control_commands || [];
+  if (commandLines.length) {
+    $("events").innerHTML = commandLines.map(item =>
+      `<div class="log-line">${escapeHtml(item)}</div>`
+    ).join("");
+  } else if ((next.events || []).length) {
+    $("events").innerHTML = `<div class="log-line muted">${escapeHtml(t("fallbackEvents"))}</div>` + next.events.map(item =>
+      `<div class="log-line">${stamp(item.timestamp)} ${escapeHtml(item.level)} &nbsp; ${escapeHtml(item.message)}</div>`
+    ).join("");
+  } else {
+    $("events").innerHTML = `<div class="log-line muted">${escapeHtml(t("noCommandLog"))}</div>`;
   }
-  hits.sort((a, b) => (a.w * a.h) - (b.w * b.h));
-  execute(`target lock ${hits[0].track_id}`, "VIDEO");
+
+  renderMissionSteps(next, next.mission);
 }
+
+function stageModesForMission(missionName) {
+  const selected = missionName || state.mission || $("missionSelect").value;
+  const mission = missionCatalog.find(item => item.name === selected);
+  if (mission && Array.isArray(mission.stage_modes)) return mission.stage_modes;
+  if (Array.isArray(state.stage_modes)) return state.stage_modes.filter(mode => mode !== "AUTO");
+  return [];
+}
+
+function renderMissionSteps(next, missionName) {
+  const override = next.stage_override || "";
+  const active = override || next.stage || next.stage_controller || "";
+  const modes = stageModesForMission(missionName);
+  $("missionSteps").innerHTML = modes.map(mode => {
+    const current = String(mode).toUpperCase() === String(active).toUpperCase();
+    return `<button class="${current ? "active-choice" : ""}" data-mission-stage="${escapeHtml(mode)}">${escapeHtml(mode)}</button>`;
+  }).join("");
+  $("missionSteps").querySelectorAll("[data-mission-stage]").forEach(button => {
+    button.onclick = () => execute(`mission stage ${button.dataset.missionStage}`, "STAGE");
+  });
+}
+
 async function loadAudit() {
   const records = await json("/api/audit?limit=100");
   history = records.filter(r => ["CLI", "BUTTON"].includes(r.source)).map(r => r.action);
-  $("auditLog").innerHTML = records.map(r =>
-    `<div class="log-line ${r.ok ? "" : "bad"}">${stamp(r.timestamp)} ${escapeHtml(r.source)} &nbsp; ${escapeHtml(r.action)}</div>`).join("");
 }
+
 async function loadMissions() {
-  const missions = await json("/api/missions");
-  $("missionSelect").innerHTML = missions.map(item =>
-    `<option value="${item.name}" ${item.active ? "selected" : ""}>${item.name}</option>`).join("");
+  missionCatalog = await json("/api/missions");
+  $("missionSelect").innerHTML = missionCatalog.map(item =>
+    `<option value="${item.name}" ${item.active ? "selected" : ""}>${item.name}</option>`
+  ).join("");
+  const activeMission = missionCatalog.find(item => item.active)?.name || state.mission || $("missionSelect").value;
+  renderMissionSteps(state || {}, activeMission);
 }
+
 async function loadConfigFiles() {
-  const files = await json("/api/config/files");
-  $("configFiles").innerHTML = files.map(path => `<button data-path="${path}">${path}</button>`).join("");
-  $("configFiles").querySelectorAll("button").forEach(button => button.onclick = () => openConfig(button.dataset.path));
+  allConfigFiles = await json("/api/config/files");
+  renderConfigFileButtons(
+    "missionConfigFiles",
+    allConfigFiles.filter(path => path.startsWith("missions/")),
+    path => openMissionConfig(path),
+  );
+  renderConfigFileButtons(
+    "systemConfigFiles",
+    allConfigFiles.filter(path => !path.startsWith("missions/")),
+    path => openSystemConfig(path),
+  );
 }
+
+function renderConfigFileButtons(containerId, files, onClick) {
+  const container = $(containerId);
+  container.innerHTML = files.map(path => `<button data-path="${escapeHtml(path)}">${escapeHtml(path)}</button>`).join("");
+  container.querySelectorAll("button").forEach(button => button.onclick = () => onClick(button.dataset.path));
+}
+
+async function readConfig(path) {
+  return json(`/api/config/file?path=${encodeURIComponent(path)}`);
+}
+
+async function openMissionConfig(path) {
+  const file = await readConfig(path);
+  missionConfigPath = path;
+  missionConfigOriginal = file.content;
+  $("missionEditingPath").textContent = path;
+  $("missionYamlEditor").value = file.content;
+  $("missionConfigDiff").textContent = "";
+  $("missionConfigStatus").textContent = file.has_backup ? t("hasBackup") : t("readOk");
+  markActiveFile("missionConfigFiles", path);
+}
+
+async function openSystemConfig(path) {
+  const file = await readConfig(path);
+  systemConfigPath = path;
+  systemConfigOriginal = file.content;
+  $("systemEditingPath").textContent = path;
+  $("systemYamlEditor").value = file.content;
+  $("systemConfigDiff").textContent = "";
+  $("systemConfigStatus").textContent = file.has_backup ? t("hasBackup") : t("readOk");
+  markActiveFile("systemConfigFiles", path);
+}
+
+function markActiveFile(containerId, path) {
+  document.querySelectorAll(`#${containerId} button`).forEach(button => {
+    button.classList.toggle("active", button.dataset.path === path);
+  });
+}
+
+function localDiff(before, after) {
+  return before === after ? t("noChange") : t("modified");
+}
+
+async function saveConfig(path, content, action, statusId, diffId) {
+  if (!path) return;
+  const result = await json(`/api/config/file?path=${encodeURIComponent(path)}`, {
+    method: "PUT",
+    body: JSON.stringify({content, action}),
+  });
+  $(diffId).textContent = result.diff || "保存成功，无文本差异。";
+  $(statusId).textContent = result.message;
+  await loadAudit();
+}
+
+function systemActionForPath(path) {
+  if (path === "config/telemetry.yaml") return "reconnect";
+  if (path === "yolo_app/config.yaml" || path === "config/app.yaml") return "restart";
+  return "save";
+}
+
 function startStatusUpdates() {
   let fallbackTimer = null;
   const pollStatus = () => json("/api/status").then(renderStatus).catch(error => {
-    $("completionHint").textContent = `状态刷新失败: ${error.message}`;
+    $("completionHint").textContent = t("refreshFailed", error.message);
   });
   const startFallback = () => {
     if (fallbackTimer !== null) return;
@@ -244,43 +481,8 @@ function startStatusUpdates() {
     startFallback();
   }
 }
-async function openConfig(path) {
-  const file = await json(`/api/config/file?path=${encodeURIComponent(path)}`);
-  currentConfigPath = path;
-  currentOriginal = file.content;
-  $("editingPath").textContent = path;
-  $("yamlEditor").value = file.content;
-  $("configDiff").textContent = "";
-  $("configStatus").textContent = file.has_backup ? "存在上一次保存前版本，可恢复。" : "尚无备份版本。";
-  document.querySelectorAll("#configFiles button").forEach(b => b.classList.toggle("active", b.dataset.path === path));
-  const action = path.startsWith("missions/") ? "保存并应用" :
-    path === "config/telemetry.yaml" ? "保存并重连" :
-    path === "yolo_app/config.yaml" ? "保存并重启 YOLO" :
-    path === "config/app.yaml" ? "保存并重启 App" : "保存并应用";
-  $("applyConfig").textContent = action;
-}
-function localDiff(before, after) {
-  if (before === after) return "没有修改。";
-  return "已修改配置；保存前后端会再次校验 YAML，并返回正式差异。";
-}
-async function saveConfig(action = "save") {
-  if (!currentConfigPath) return;
-  if (action !== "save" && !confirm(`${$("applyConfig").textContent} 将可能停止命令发送或重启服务，确认继续？`)) return;
-  const result = await json(`/api/config/file?path=${encodeURIComponent(currentConfigPath)}`, {
-    method: "PUT", body: JSON.stringify({content: $("yamlEditor").value, action})
-  });
-  currentOriginal = $("yamlEditor").value;
-  $("configDiff").textContent = result.diff || "保存成功，无文本差异。";
-  $("configStatus").textContent = result.message;
-  await loadAudit();
-}
-function actionForPath() {
-  if (currentConfigPath.startsWith("missions/")) return "apply";
-  if (currentConfigPath === "config/telemetry.yaml") return "reconnect";
-  if (currentConfigPath === "yolo_app/config.yaml" || currentConfigPath === "config/app.yaml") return "restart";
-  return "save";
-}
-async function init() {
+
+async function initVideo() {
   const videoConfig = await json("/api/yolo/stream");
   const videoUrl = `${location.protocol}//${location.hostname}:${videoConfig.port}${videoConfig.path}`;
   $("video").src = videoUrl;
@@ -289,52 +491,93 @@ async function init() {
     $("videoOffline").style.display = "block";
     setTimeout(() => { $("video").src = `${videoUrl}?retry=${Date.now()}`; }, 1500);
   };
-  $("hitCanvas").onclick = clickVideo;
-  document.querySelectorAll("[data-command]").forEach(button => button.onclick = () => {
-    if (button.dataset.confirm && !confirm(button.dataset.confirm)) return;
-    execute(button.dataset.command, button.dataset.origin || "BUTTON");
+}
+
+function wireControls() {
+  document.querySelectorAll(".nav-item").forEach(tab => tab.onclick = () => {
+    document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item === tab));
+    document.querySelectorAll(".page").forEach(page => page.classList.toggle("active", page.id === `${tab.dataset.page}Page`));
   });
-  $("takeoffButton").onclick = () => {
-    const altitude = $("takeoffAltitude").value;
-    if (confirm(`确认起飞至 ${altitude} m？`)) execute(`takeoff ${altitude}`, "BUTTON");
+  document.querySelectorAll("[data-command]").forEach(button => button.onclick = () => {
+    const message = button.dataset.confirmKey ? t(button.dataset.confirmKey) : button.dataset.confirm;
+    if (message && !confirm(message)) return;
+    execute(button.dataset.command, "BUTTON");
+  });
+  $("langSelect").value = lang;
+  $("langSelect").onchange = event => {
+    lang = event.target.value;
+    localStorage.setItem("uav_ui_lang", lang);
+    applyLanguage();
   };
   $("missionSwitch").onclick = () => execute(`mission switch ${$("missionSelect").value}`, "BUTTON").then(loadMissions);
+  $("missionSelect").onchange = () => renderMissionSteps(state || {}, $("missionSelect").value);
+  $("modeButton").onclick = () => execute(`mode ${$("modeSelect").value}`, "BUTTON");
+  $("takeoffButton").onclick = () => {
+    const altitude = $("takeoffAltitude").value;
+    if (confirm(t("confirmTakeoff", altitude))) execute(`takeoff ${altitude}`, "BUTTON");
+  };
+  $("sendToggle").onclick = () => {
+    if (state.controllers?.send_commands || confirm(t("confirmSendOn"))) {
+      execute(`control send ${state.controllers?.send_commands ? "off" : "on"}`, "BUTTON");
+    }
+  };
+  $("yoloStartButton").onclick = async () => {
+    const result = await json("/api/services/yolo/restart", {method: "POST"});
+    $("completionHint").textContent = result.message;
+    await loadAudit();
+    await initVideo();
+  };
   $("sendCommand").onclick = () => {
     const input = $("commandInput");
-    execute(input.value, "CLI"); input.value = ""; historyIndex = -1;
+    execute(input.value, "CLI");
+    input.value = "";
+    historyIndex = -1;
   };
   $("commandInput").onkeydown = event => {
     if (event.key === "Enter") { event.preventDefault(); $("sendCommand").click(); }
     if (event.key === "Tab") {
       event.preventDefault();
       const match = completions.find(item => item.toLowerCase().startsWith(event.target.value.toLowerCase()));
-      if (match) { event.target.value = match; $("completionHint").textContent = `补全: ${match}`; }
+      if (match) { event.target.value = match; $("completionHint").textContent = t("complete", match); }
     }
     if (event.key === "ArrowUp" && history.length) {
-      event.preventDefault(); historyIndex = Math.min(historyIndex + 1, history.length - 1); event.target.value = history[historyIndex];
+      event.preventDefault();
+      historyIndex = Math.min(historyIndex + 1, history.length - 1);
+      event.target.value = history[historyIndex];
     }
     if (event.key === "ArrowDown" && historyIndex >= 0) {
-      event.preventDefault(); historyIndex -= 1; event.target.value = historyIndex < 0 ? "" : history[historyIndex];
+      event.preventDefault();
+      historyIndex -= 1;
+      event.target.value = historyIndex < 0 ? "" : history[historyIndex];
     }
   };
-  document.querySelectorAll(".tab").forEach(tab => tab.onclick = () => {
-    document.querySelectorAll(".tab").forEach(item => item.classList.toggle("active", item === tab));
-    document.querySelectorAll(".page").forEach(page => page.classList.toggle("active", page.id === `${tab.dataset.page}Page`));
-  });
-  $("previewConfig").onclick = () => $("configDiff").textContent = localDiff(currentOriginal, $("yamlEditor").value);
-  $("saveConfig").onclick = () => saveConfig("save");
-  $("applyConfig").onclick = () => saveConfig(actionForPath());
-  $("restoreConfig").onclick = async () => {
-    if (!currentConfigPath || !confirm("确认恢复上一次保存前版本？")) return;
-    const action = currentConfigPath.startsWith("missions/") ? "apply" : "save";
-    const result = await json(`/api/config/restore?path=${encodeURIComponent(currentConfigPath)}&action=${action}`, {method: "POST"});
-    $("configStatus").textContent = result.message; $("configDiff").textContent = result.diff; await openConfig(currentConfigPath); await loadAudit();
+  $("missionConfigReload").onclick = () => missionConfigPath && openMissionConfig(missionConfigPath);
+  $("missionConfigSave").onclick = () => saveConfig(missionConfigPath, $("missionYamlEditor").value, "save", "missionConfigStatus", "missionConfigDiff");
+  $("missionConfigApply").onclick = () => {
+    if (missionConfigPath && confirm(t("confirmMissionApply"))) {
+      saveConfig(missionConfigPath, $("missionYamlEditor").value, "apply", "missionConfigStatus", "missionConfigDiff");
+    }
   };
-  $("reconnectTelemetry").onclick = () => confirm("重连通信将关闭自动发送，确认？") && json("/api/services/telemetry/reconnect", {method: "POST"}).then(loadAudit);
-  $("restartYolo").onclick = () => confirm("确认重启 YOLO 服务？") && json("/api/services/yolo/restart", {method: "POST"}).then(loadAudit);
-  $("restartApp").onclick = () => confirm("重启 App 将关闭自动发送并暂时断开网页，确认？") && json("/api/services/app/restart", {method: "POST"}).then(loadAudit);
+  $("systemConfigReload").onclick = () => systemConfigPath && openSystemConfig(systemConfigPath);
+  $("systemConfigSave").onclick = () => saveConfig(systemConfigPath, $("systemYamlEditor").value, "save", "systemConfigStatus", "systemConfigDiff");
+  $("systemConfigApply").onclick = () => {
+    if (systemConfigPath && confirm(t("confirmSystemApply"))) {
+      saveConfig(systemConfigPath, $("systemYamlEditor").value, systemActionForPath(systemConfigPath), "systemConfigStatus", "systemConfigDiff");
+    }
+  };
+}
+
+async function init() {
+  wireControls();
+  applyLanguage();
+  await initVideo();
   completions = (await json("/api/commands/completions")).commands;
   await Promise.all([loadAudit(), loadMissions(), loadConfigFiles()]);
+  const firstMissionConfig = allConfigFiles.find(path => path.startsWith("missions/"));
+  const firstSystemConfig = allConfigFiles.find(path => !path.startsWith("missions/"));
+  if (firstMissionConfig) await openMissionConfig(firstMissionConfig);
+  if (firstSystemConfig) await openSystemConfig(firstSystemConfig);
   startStatusUpdates();
 }
+
 init().catch(error => { $("completionHint").textContent = error.message; });
